@@ -1,6 +1,6 @@
 --- b/drivers/usb/host/xhci-pci.c
 +++ a/drivers/usb/host/xhci-pci.c
-@@ -15,7 +15,6 @@
+@@ -16,7 +16,6 @@
  
  #include "xhci.h"
  #include "xhci-trace.h"
@@ -8,11 +8,10 @@
  
  #define SSIC_PORT_NUM		2
  #define SSIC_PORT_CFG2		0x880c
-@@ -88,16 +87,7 @@
+@@ -92,16 +91,7 @@ static int xhci_pci_reinit(struct xhci_h
  
  static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
  {
-+	struct pci_dev		*pdev = to_pci_dev(dev);
 -	struct pci_dev                  *pdev = to_pci_dev(dev);
 -	struct xhci_driver_data         *driver_data;
 -	const struct pci_device_id      *id;
@@ -23,25 +22,28 @@
 -		driver_data = (struct xhci_driver_data *)id->driver_data;
 -		xhci->quirks |= driver_data->quirks;
 -	}
++	struct pci_dev		*pdev = to_pci_dev(dev);
  
  	/* Look for vendor-specific quirks */
  	if (pdev->vendor == PCI_VENDOR_ID_FRESCO_LOGIC &&
-@@ -338,14 +328,6 @@
+@@ -346,16 +336,8 @@ static int xhci_pci_probe(struct pci_dev
  	int retval;
  	struct xhci_hcd *xhci;
  	struct usb_hcd *hcd;
 -	struct xhci_driver_data *driver_data;
--
+ 	struct reset_control *reset;
+ 
 -	driver_data = (struct xhci_driver_data *)id->driver_data;
 -	if (driver_data && driver_data->quirks & XHCI_RENESAS_FW_QUIRK) {
 -		retval = renesas_xhci_check_request_fw(dev, id);
 -		if (retval)
 -			return retval;
 -	}
- 
- 	/* Prevent runtime suspending between USB-2 and USB-3 initialization */
- 	pm_runtime_get_noresume(&dev->dev);
-@@ -407,9 +389,6 @@
+-
+ 	reset = devm_reset_control_get_optional_exclusive(&dev->dev, NULL);
+ 	if (IS_ERR(reset))
+ 		return PTR_ERR(reset);
+@@ -422,9 +404,6 @@ static void xhci_pci_remove(struct pci_d
  	struct xhci_hcd *xhci;
  
  	xhci = hcd_to_xhci(pci_get_drvdata(dev));
@@ -51,7 +53,7 @@
  	xhci->xhc_state |= XHCI_STATE_REMOVING;
  
  	if (xhci->quirks & XHCI_DEFAULT_PM_RUNTIME_ALLOW)
-@@ -561,26 +540,14 @@
+@@ -578,26 +557,14 @@ static void xhci_pci_shutdown(struct usb
  
  /*-------------------------------------------------------------------------*/
  
