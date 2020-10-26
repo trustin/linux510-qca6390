@@ -36,18 +36,15 @@ source=("https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         # ARCH Patches
         '0001-ZEN-Add-sysctl-and-CONFIG-to-disallow-unprivileged-CLONE_NEWUSER.patch'
         # MANJARO Patches
-        '0201-apparmor-patch-to-provide-compatibility-with-v2-net-rules.patch'
-        '0202-apparmor-af_unix-mediation.patch'
-        '0203-apparmor-fix-use-after-free-in-sk_peer_label.patch'
-        '0204-apparmor-fix-apparmor-mediating-locking-non-fs-unix-sockets.patch')
+        #'0201-apparmor-patch-to-provide-compatibility-with-v2-net-rules.patch'
+        #'0202-apparmor-af_unix-mediation.patch'
+        #'0203-apparmor-fix-use-after-free-in-sk_peer_label.patch'
+        #'0204-apparmor-fix-apparmor-mediating-locking-non-fs-unix-sockets.patch'
+       )
 sha256sums=('483d8b3945963ea375026c4dde019da36f5d2116241036b09493e63e92e39ee8'
             'ddee76b6b10458eb91cb076d03a9bf27b27b2d6ee0a717efdbdb51c77e96e9ba'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
-            '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
-            '98202b8ad70d02d86603294bae967874fa7b18704b5c7b867568b0fd33a08921'
-            '5cbbf3db9ea3205e9b89fe3049bea6dd626181db0cb0dc461e4cf5a400c68dd6'
-            'c7dbec875d0c1d6782c037a1dcefff2e5bdb5fc9dffac1beea07dd8c1bdef1d7'
-            '77746aea71ffb06c685e7769b49c78e29af9b2e28209cd245e95d9cbb0dba3c9')
+            '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421')
 prepare() {
   mv "${srcdir}/linux-${_basekernel}-${_rc}" "${srcdir}/linux-${_basekernel}"
   cd "${srcdir}/linux-${_basekernel}"
