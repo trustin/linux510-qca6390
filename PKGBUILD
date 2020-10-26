@@ -36,6 +36,7 @@ source=("https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         # ARCH Patches
         '0001-ZEN-Add-sysctl-and-CONFIG-to-disallow-unprivileged-CLONE_NEWUSER.patch'
         # MANJARO Patches
+        '0101-revert-xhci-Add-support-for-Renesas-controller-with-memory.patch'
         #'0201-apparmor-patch-to-provide-compatibility-with-v2-net-rules.patch'
         #'0202-apparmor-af_unix-mediation.patch'
         #'0203-apparmor-fix-use-after-free-in-sk_peer_label.patch'
@@ -44,7 +45,8 @@ source=("https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
 sha256sums=('483d8b3945963ea375026c4dde019da36f5d2116241036b09493e63e92e39ee8'
             'ddee76b6b10458eb91cb076d03a9bf27b27b2d6ee0a717efdbdb51c77e96e9ba'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
-            '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421')
+            '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
+            '14fff25b581a0a8281a3419abd54d3bd200ede0374e685799da804f941c50f79')
 prepare() {
   mv "${srcdir}/linux-${_basekernel}-${_rc}" "${srcdir}/linux-${_basekernel}"
   cd "${srcdir}/linux-${_basekernel}"
