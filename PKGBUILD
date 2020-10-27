@@ -15,7 +15,10 @@ _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
 _rc=rc1
-pkgver=5.10.rc1
+_commit=4525c8781ec0701ce824e8bd379ae1b129e26568
+_shortcommit=${_rc}.d1026.g${_commit:0:7}
+_pkgver=${_basekernel}${_shortcommit}
+pkgver=5.10rc1.d1026.g4525c87
 pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
@@ -28,32 +31,44 @@ makedepends=('bc'
     'kmod'
     'xmlto')
 options=('!strip')
-source=("https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
+source=(#"https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         #"https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.xz"
         #"https://www.kernel.org/pub/linux/kernel/v5.x/patch-${pkgver}.xz"
+        "linux-${_pkgver}.zip::https://codeload.github.com/torvalds/linux/zip/$_commit"
         # the main kernel config files
         'config' 'config.anbox'
         # ARCH Patches
         '0001-ZEN-Add-sysctl-and-CONFIG-to-disallow-unprivileged-CLONE_NEWUSER.patch'
         # MANJARO Patches
-        '0101-revert-xhci-Add-support-for-Renesas-controller-with-memory.patch'
-        #'0201-apparmor-patch-to-provide-compatibility-with-v2-net-rules.patch'
-        #'0202-apparmor-af_unix-mediation.patch'
-        #'0203-apparmor-fix-use-after-free-in-sk_peer_label.patch'
-        #'0204-apparmor-fix-apparmor-mediating-locking-non-fs-unix-sockets.patch'
-       )
-sha256sums=('483d8b3945963ea375026c4dde019da36f5d2116241036b09493e63e92e39ee8'
-            'ddee76b6b10458eb91cb076d03a9bf27b27b2d6ee0a717efdbdb51c77e96e9ba'
+        '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
+        '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
+        '0103-futex.patch'
+        '0104-revert-xhci-Add-support-for-Renesas-controller-with-memory.patch'
+        # Lenovo + AMD
+        '0302-lenovo-wmi2.patch'
+        # Temp Fixes
+
+        )
+sha256sums=('ee2d80b0d3848d2c6febb11fe48bc4ea29b8a7fce1320845fca72a2b0a712719'
+            'd8eae3ce8124254c6b6d78f43e68790886427edc1725a0c43b32fc049be641d7'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
-            '14fff25b581a0a8281a3419abd54d3bd200ede0374e685799da804f941c50f79')
+            '7823d7488f42bc4ed7dfae6d1014dbde679d8b862c9a3697a39ba0dae5918978'
+            '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
+            'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
+            '83b5684223309809393bdffc5122924cb9940403d682a887b0aa6524015df973'
+            '1d58ef2991c625f6f0eb33b4cb8303932f53f1c4694e42bae24c9cd36d2ad013')
+pkgver() {
+  printf '%s' "${_pkgver}"
+}
+
 prepare() {
-  mv "${srcdir}/linux-${_basekernel}-${_rc}" "${srcdir}/linux-${_basekernel}"
+  mv "${srcdir}/linux-${_commit}" "${srcdir}/linux-${_basekernel}"
   cd "${srcdir}/linux-${_basekernel}"
 
   # add upstream patch
-  msg "add upstream patch"
-  #patch -p1 -i "${srcdir}/patch-${pkgver}"
+#  msg "add upstream patch"
+#  patch -p1 -i "${srcdir}/patch-${pkgver}"
 
   local src
   for src in "${source[@]}"; do
@@ -75,6 +90,9 @@ prepare() {
 
   msg "set extraversion to pkgrel"
   sed -ri "s|^(EXTRAVERSION =).*|\1 -${pkgrel}|" Makefile
+
+  # set patchlevel to 10
+#  sed -ri "s|^(PATCHLEVEL =).*|\1 10|" Makefile
 
   msg "don't run depmod on 'make install'"
   # We'll do this ourselves in packaging
