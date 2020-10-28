@@ -15,10 +15,10 @@ _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
 _rc=rc1
-_commit=4525c8781ec0701ce824e8bd379ae1b129e26568
-_shortcommit=.${_rc}.d1026.g${_commit:0:7}
+_commit=ed8780e3f2ecc82645342d070c6b4e530532e680
+_shortcommit=.${_rc}.d1027.g${_commit:0:7}
 _pkgver=${_basekernel}${_shortcommit}
-pkgver=5.10.rc1.d1026.g4525c87
+pkgver=5.10.rc1.d1027.ged8780e
 pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
@@ -49,7 +49,7 @@ source=(#"https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         # Temp Fixes
 
         )
-sha256sums=('ee2d80b0d3848d2c6febb11fe48bc4ea29b8a7fce1320845fca72a2b0a712719'
+sha256sums=('4d08f533d5478bd8c1ebdebeb7f54533987b377d7528a891d99be1191467b1f0'
             'd8eae3ce8124254c6b6d78f43e68790886427edc1725a0c43b32fc049be641d7'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
