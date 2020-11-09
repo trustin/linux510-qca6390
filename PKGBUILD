@@ -14,11 +14,11 @@ pkgname=('linux510' 'linux510-headers')
 _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
-_rc=rc2
-_commit=3cea11cd5e3b00d91caf0b4730194039b45c5891
-_shortcommit=.${_rc}.d1101.g${_commit:0:7}
+_rc=rc3
+_commit=f8394f232b1eab649ce2df5c5f15b0e528c92091
+_shortcommit=.${_rc}.d1108.g${_commit:0:7}
 _pkgver=${_basekernel}${_shortcommit}
-pkgver=5.10.rc2.d1101.g3cea11c
+pkgver=5.10.rc3.d1108.gf8394f2
 pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
@@ -49,7 +49,7 @@ source=(#"https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         # Temp Fixes
 
         )
-sha256sums=('defd2edaa01ae51490ba27e5e555bdad892bc2ec8e74ee025a521ac659357bed'
+sha256sums=('b322dc70cbe0e2759579c4739988608d3b8c1bd57dd58b92b9b126c4139f405e'
             'd8eae3ce8124254c6b6d78f43e68790886427edc1725a0c43b32fc049be641d7'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
