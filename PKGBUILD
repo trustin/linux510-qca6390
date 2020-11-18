@@ -15,10 +15,10 @@ _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
 _rc=rc4
-_commit=9c87c9f41245baa3fc4716cf39141439cf405b01
-_shortcommit=.${_rc}.d1116.g${_commit:0:7}
+_commit=0fa8ee0d9ab95c9350b8b84574824d9a384a9f7d
+_shortcommit=.${_rc}.d1117.g${_commit:0:7}
 _pkgver=${_basekernel}${_shortcommit}
-pkgver=5.10.rc4.d1116.g9c87c9f
+pkgver=5.10.rc4.d1117.g0fa8ee0
 pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
@@ -44,12 +44,14 @@ source=(#"https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
         '0103-futex.patch'
         '0104-revert-xhci-Add-support-for-Renesas-controller-with-memory.patch'
+        '0106-ucsi-acpi.patch'
+        '0106-ucsi.patch'
         # Lenovo + AMD
         '0302-lenovo-wmi2.patch'
         # Temp Fixes
 
         )
-sha256sums=('f1c7ad834148438b8907a2017b9269e96286e1d59fb73837c9f44abc6c552656'
+sha256sums=('314cc10cdf17d5636d166adab509f28843dd07413ae948d358d2c5d147762ff7'
             'd8eae3ce8124254c6b6d78f43e68790886427edc1725a0c43b32fc049be641d7'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
@@ -57,6 +59,8 @@ sha256sums=('f1c7ad834148438b8907a2017b9269e96286e1d59fb73837c9f44abc6c552656'
             '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
             'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
             '83b5684223309809393bdffc5122924cb9940403d682a887b0aa6524015df973'
+            'e9ca3a8398360fa5d8d0deb5f0c0ca3d174865bd13c91eb6e0232cdbcdb2258b'
+            '6446e388c0e13290fd99137539c6d3089994313a3a0c00305dea83faf4951137'
             '1d58ef2991c625f6f0eb33b4cb8303932f53f1c4694e42bae24c9cd36d2ad013')
 pkgver() {
   printf '%s' "${_pkgver}"
