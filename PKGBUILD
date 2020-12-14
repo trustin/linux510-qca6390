@@ -14,12 +14,8 @@ pkgname=('linux510' 'linux510-headers')
 _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
-_rc=rc7
-_commit=0477e92881850d44910a7e94fc2c46f96faa131f
-_shortcommit=.${_rc}.d1206.g${_commit:0:7}
-_pkgver=${_basekernel}${_shortcommit}
-pkgver=5.10.rc7.d1206.g0477e92
-pkgrel=1
+pkgver=5.10.0
+pkgrel=0
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -29,12 +25,14 @@ makedepends=('bc'
     'git'
     'inetutils'
     'kmod'
-    'xmlto')
+    'xmlto'
+    'cpio'
+    'perl'
+    'tar'
+    'xz')
 options=('!strip')
-source=(#"https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
-        #"https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.xz"
-        #"https://www.kernel.org/pub/linux/kernel/v5.x/patch-${pkgver}.xz"
-        "linux-${_pkgver}.zip::https://codeload.github.com/torvalds/linux/zip/$_commit"
+source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.xz"
+#        "https://www.kernel.org/pub/linux/kernel/v5.x/patch-${pkgver}.xz"
         # the main kernel config files
         'config' 'config.anbox'
         # ARCH Patches
@@ -52,8 +50,8 @@ source=(#"https://git.kernel.org/torvalds/t/linux-${_basekernel}-${_rc}.tar.gz"
         '0302-lenovo-wmi2.patch'
         # Temp Fixes
         )
-sha256sums=('6affd6763069545ece12da7098933ad8612a390c80b58cf64dc8ce722ec4b697'
-            '279a3388f6c55b72ef59c67b22e7c8374759cea44a438aec45301bec2ae3c48f'
+sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
+            '0a41bc6741c2e5cb0c1f1940c29d754b352110c0a0c8992ee46e8973d97dbc40'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             '3c1c63194dc808b63166646d71c9fc2e690605178527bdd5528084613990207a'
@@ -65,12 +63,8 @@ sha256sums=('6affd6763069545ece12da7098933ad8612a390c80b58cf64dc8ce722ec4b697'
             'e9ca3a8398360fa5d8d0deb5f0c0ca3d174865bd13c91eb6e0232cdbcdb2258b'
             '6446e388c0e13290fd99137539c6d3089994313a3a0c00305dea83faf4951137'
             '1d58ef2991c625f6f0eb33b4cb8303932f53f1c4694e42bae24c9cd36d2ad013')
-pkgver() {
-  printf '%s' "${_pkgver}"
-}
 
 prepare() {
-  mv "${srcdir}/linux-${_commit}" "${srcdir}/linux-${_basekernel}"
   cd "${srcdir}/linux-${_basekernel}"
 
   # add upstream patch
@@ -97,9 +91,6 @@ prepare() {
 
   msg "set extraversion to pkgrel"
   sed -ri "s|^(EXTRAVERSION =).*|\1 -${pkgrel}|" Makefile
-
-  # set patchlevel to 10
-#  sed -ri "s|^(PATCHLEVEL =).*|\1 10|" Makefile
 
   msg "don't run depmod on 'make install'"
   # We'll do this ourselves in packaging
@@ -174,6 +165,7 @@ package_linux510() {
 
 package_linux510-headers() {
   pkgdesc="Header files and scripts for building modules for ${pkgbase/linux/Linux} kernel"
+  depends=('gawk' 'python' 'libelf')
   provides=("linux-headers=$pkgver")
 
   cd "${srcdir}/linux-${_basekernel}"
