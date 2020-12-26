@@ -14,8 +14,8 @@ pkgname=('linux510' 'linux510-headers')
 _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
-pkgver=5.10.2
-pkgrel=2
+pkgver=5.10.3
+pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -68,7 +68,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         # Temp Fixes
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
-            'ac9b1858d9e0b48079be05cb13f5fd4e7069a3a9f3dcf7e61d53e76e0222c5cc'
+            '64b1ca220369567fb55021ce5cbd23366f4792211d0bf9401555300aa37f4137'
             '8819bb5a660e8eb1ca7ce8e76bf7e73cc7bd77fd5cc91da178a7306f994e8df4'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
