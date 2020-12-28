@@ -7,7 +7,7 @@
 # Thomas Baechler <thomas@archlinux.org>
 
 # Cloud Server
-_server=ccx51
+_server=cpx51
 
 pkgbase=linux510
 pkgname=('linux510' 'linux510-headers')
