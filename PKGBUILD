@@ -15,7 +15,7 @@ _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
 pkgver=5.10.3
-pkgrel=1
+pkgrel=2
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -39,6 +39,11 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0001-ZEN-Add-sysctl-and-CONFIG-to-disallow-unprivileged-CLONE_NEWUSER.patch'
         '0002-Bluetooth-Fix-LL-PRivacy-BLE-device-fails-to-connect.patch'
         '0003-Bluetooth-Fix-attempting-to-set-RPA-timeout-when-unsupported.patch'
+        '0004-HID-quirks-Add-Apple-Magic-Trackpad-2-to-hid_have_special_driver-list.patch.patch'
+        '0005-drm-amd-display-Add-get_dig_frontend-implementation-for-DCEx.patch'
+        '0006-drm-amdgpu-only-set-DP-subconnector-type-on-DP-and-eDP-connectors.patch'
+        '0007-btrfs-Fix-500-2000-performance-regression-w5.10.patch'
+        '0008-iwlwifi-Fix-regression-from-UDP-segmentation-support.patch'
         # MANJARO Patches
         '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
         '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
@@ -47,6 +52,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0106-ucsi-acpi.patch'
         '0106-ucsi.patch'
         # Lenovo + AMD
+        '0301-lenovo-amd-gpio.patch'
         '0302-lenovo-wmi2.patch'
         # Bootsplash
         '0401-revert-fbcon-remove-now-unusued-softback_lines-cursor-argument.patch'        
@@ -74,12 +80,18 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             '3c1c63194dc808b63166646d71c9fc2e690605178527bdd5528084613990207a'
             'e216346f7c7761a53b76dea0638898e52aac9e4527a64893c9dfa9936b3c5a0d'
+            'df5843818f1571841e1a8bdbe38d7f853d841f38de46d6a6a5765de089495578'
+            '56ca378a03341bbe8ddd13a5630922b0c4e0d505b738aec3b21dcfa55ff200d7'
+            '529d08602bc2c02c44f7402297e5cf5957692c686ecb9e46083bde093c161821'
+            'fe2bdf14a6a011571ce45b8ccd8399776e17d50d0f5852d7364b738fd1a59c9c'
+            '5791e6fd2ae2f4938b1190af65da3213cbfa2b3e7f50e6dcfdc8ded3ca17d720'
             '7823d7488f42bc4ed7dfae6d1014dbde679d8b862c9a3697a39ba0dae5918978'
             '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
             'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
             '83b5684223309809393bdffc5122924cb9940403d682a887b0aa6524015df973'
             'e9ca3a8398360fa5d8d0deb5f0c0ca3d174865bd13c91eb6e0232cdbcdb2258b'
             '6446e388c0e13290fd99137539c6d3089994313a3a0c00305dea83faf4951137'
+            '9d5b3342ec6eedadfa61440a6aa79975fc7f92edb920aa8e9941d3443a3f074e'
             '1d58ef2991c625f6f0eb33b4cb8303932f53f1c4694e42bae24c9cd36d2ad013'
             '2b11905b63b05b25807dd64757c779da74dd4c37e36d3f7a46485b1ee5a9d326'
             '94a8538251ad148f1025cc3de446ce64f73dc32b01815426fb159c722e8fa5bc'

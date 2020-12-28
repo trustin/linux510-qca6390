@@ -1,0 +1,521 @@
+diff -Narup a/drivers/gpio/gpiolib-acpi.c b/drivers/gpio/gpiolib-acpi.c
+--- a/drivers/gpio/gpiolib-acpi.c	2020-12-14 06:41:30.000000000 +0800
++++ b/drivers/gpio/gpiolib-acpi.c	2020-12-22 14:31:53.078877803 +0800
+@@ -205,6 +205,68 @@ static void acpi_gpiochip_request_irqs(s
+ 		acpi_gpiochip_request_irq(acpi_gpio, event);
+ }
+ 
++static enum gpiod_flags
++acpi_gpio_to_gpiod_flags(const struct acpi_resource_gpio *agpio, int polarity)
++{
++	/* GpioInt() implies input configuration */
++	if (agpio->connection_type == ACPI_RESOURCE_GPIO_TYPE_INT)
++		return GPIOD_IN;
++
++	switch (agpio->io_restriction) {
++	case ACPI_IO_RESTRICT_INPUT:
++		return GPIOD_IN;
++	case ACPI_IO_RESTRICT_OUTPUT:
++		/*
++		 * ACPI GPIO resources don't contain an initial value for the
++		 * GPIO. Therefore we deduce that value from the pull field
++		 * and the polarity instead. If the pin is pulled up we assume
++		 * default to be high, if it is pulled down we assume default
++		 * to be low, otherwise we leave pin untouched. For active low
++		 * polarity values will be switched. See also
++		 * Documentation/firmware-guide/acpi/gpio-properties.rst.
++		 */
++		switch (agpio->pin_config) {
++		case ACPI_PIN_CONFIG_PULLUP:
++			return polarity == GPIO_ACTIVE_LOW ? GPIOD_OUT_LOW : GPIOD_OUT_HIGH;
++		case ACPI_PIN_CONFIG_PULLDOWN:
++			return polarity == GPIO_ACTIVE_LOW ? GPIOD_OUT_HIGH : GPIOD_OUT_LOW;
++		default:
++			break;
++		}
++		break;
++	default:
++		break;
++	}
++
++	/*
++	 * Assume that the BIOS has configured the direction and pull
++	 * accordingly.
++	 */
++	return GPIOD_ASIS;
++}
++
++static struct gpio_desc *acpi_request_own_gpiod(struct gpio_chip *chip,
++						struct acpi_resource_gpio *agpio,
++						unsigned int index,
++						const char *label)
++{
++	int polarity = GPIO_ACTIVE_HIGH;
++	enum gpiod_flags flags = acpi_gpio_to_gpiod_flags(agpio, polarity);
++	unsigned int pin = agpio->pin_table[index];
++	struct gpio_desc *desc;
++	int ret;
++
++	desc = gpiochip_request_own_desc(chip, pin, label, polarity, flags);
++	if (IS_ERR(desc))
++		return desc;
++
++	ret = gpio_set_debounce_timeout(desc, agpio->debounce_timeout);
++	if (ret)
++		gpiochip_free_own_desc(desc);
++
++	return ret ? ERR_PTR(ret) : desc;
++}
++
+ static bool acpi_gpio_in_ignore_list(const char *controller_in, int pin_in)
+ {
+ 	const char *controller, *pin_str;
+@@ -290,8 +352,8 @@ static acpi_status acpi_gpiochip_alloc_e
+ 	if (!handler)
+ 		return AE_OK;
+ 
+-	desc = gpiochip_request_own_desc(chip, pin, "ACPI:Event",
+-					 GPIO_ACTIVE_HIGH, GPIOD_IN);
++	desc = acpi_request_own_gpiod(chip, agpio, 0, "ACPI:Event");
++
+ 	if (IS_ERR(desc)) {
+ 		dev_err(chip->parent,
+ 			"Failed to request GPIO for pin 0x%04X, err %ld\n",
+@@ -526,39 +588,6 @@ static bool acpi_get_driver_gpio_data(st
+ 	return false;
+ }
+ 
+-static enum gpiod_flags
+-acpi_gpio_to_gpiod_flags(const struct acpi_resource_gpio *agpio)
+-{
+-	switch (agpio->io_restriction) {
+-	case ACPI_IO_RESTRICT_INPUT:
+-		return GPIOD_IN;
+-	case ACPI_IO_RESTRICT_OUTPUT:
+-		/*
+-		 * ACPI GPIO resources don't contain an initial value for the
+-		 * GPIO. Therefore we deduce that value from the pull field
+-		 * instead. If the pin is pulled up we assume default to be
+-		 * high, if it is pulled down we assume default to be low,
+-		 * otherwise we leave pin untouched.
+-		 */
+-		switch (agpio->pin_config) {
+-		case ACPI_PIN_CONFIG_PULLUP:
+-			return GPIOD_OUT_HIGH;
+-		case ACPI_PIN_CONFIG_PULLDOWN:
+-			return GPIOD_OUT_LOW;
+-		default:
+-			break;
+-		}
+-	default:
+-		break;
+-	}
+-
+-	/*
+-	 * Assume that the BIOS has configured the direction and pull
+-	 * accordingly.
+-	 */
+-	return GPIOD_ASIS;
+-}
+-
+ static int
+ __acpi_gpio_update_gpiod_flags(enum gpiod_flags *flags, enum gpiod_flags update)
+ {
+@@ -664,6 +693,7 @@ static int acpi_populate_gpio_lookup(str
+ 		lookup->desc = acpi_get_gpiod(agpio->resource_source.string_ptr,
+ 					      agpio->pin_table[pin_index]);
+ 		lookup->info.pin_config = agpio->pin_config;
++		lookup->info.debounce = agpio->debounce_timeout;
+ 		lookup->info.gpioint = gpioint;
+ 
+ 		/*
+@@ -674,13 +704,13 @@ static int acpi_populate_gpio_lookup(str
+ 		 * - ACPI_ACTIVE_HIGH == GPIO_ACTIVE_HIGH
+ 		 */
+ 		if (lookup->info.gpioint) {
+-			lookup->info.flags = GPIOD_IN;
+ 			lookup->info.polarity = agpio->polarity;
+ 			lookup->info.triggering = agpio->triggering;
+ 		} else {
+-			lookup->info.flags = acpi_gpio_to_gpiod_flags(agpio);
+ 			lookup->info.polarity = lookup->active_low;
+ 		}
++
++		lookup->info.flags = acpi_gpio_to_gpiod_flags(agpio, lookup->info.polarity);
+ 	}
+ 
+ 	return 1;
+@@ -942,6 +972,7 @@ int acpi_dev_gpio_irq_get(struct acpi_de
+ 
+ 		if (info.gpioint && idx++ == index) {
+ 			unsigned long lflags = GPIO_LOOKUP_FLAGS_DEFAULT;
++			enum gpiod_flags dflags = GPIOD_ASIS;
+ 			char label[32];
+ 			int irq;
+ 
+@@ -951,12 +982,19 @@ int acpi_dev_gpio_irq_get(struct acpi_de
+ 			irq = gpiod_to_irq(desc);
+ 			if (irq < 0)
+ 				return irq;
++			
++			acpi_gpio_update_gpiod_flags(&dflags, &info);
++			acpi_gpio_update_gpiod_lookup_flags(&lflags, &info);
+ 
+ 			snprintf(label, sizeof(label), "GpioInt() %d", index);
+-			ret = gpiod_configure_flags(desc, label, lflags, info.flags);
++			ret = gpiod_configure_flags(desc, label, lflags, dflags);
+ 			if (ret < 0)
+ 				return ret;
+ 
++			ret = gpio_set_debounce_timeout(desc, info.debounce);
++			if (ret)
++				return ret;
++
+ 			irq_flags = acpi_dev_get_irq_type(info.triggering,
+ 							  info.polarity);
+ 
+@@ -979,7 +1017,7 @@ acpi_gpio_adr_space_handler(u32 function
+ 			    void *region_context)
+ {
+ 	struct acpi_gpio_chip *achip = region_context;
+-	struct gpio_chip *chip = achip->chip;
++	//struct gpio_chip *chip = achip->chip;
+ 	struct acpi_resource_gpio *agpio;
+ 	struct acpi_resource *ares;
+ 	int pin_index = (int)address;
+@@ -1042,23 +1080,20 @@ acpi_gpio_adr_space_handler(u32 function
+ 		}
+ 
+ 		if (!found) {
+-			enum gpiod_flags flags = acpi_gpio_to_gpiod_flags(agpio);
+-			const char *label = "ACPI:OpRegion";
+ 
+-			desc = gpiochip_request_own_desc(chip, pin, label,
+-							 GPIO_ACTIVE_HIGH,
+-							 flags);
+ 			if (IS_ERR(desc)) {
+-				status = AE_ERROR;
++				
+ 				mutex_unlock(&achip->conn_lock);
++				status = AE_ERROR;
+ 				goto out;
+ 			}
+ 
+ 			conn = kzalloc(sizeof(*conn), GFP_KERNEL);
+ 			if (!conn) {
+-				status = AE_NO_MEMORY;
++				
+ 				gpiochip_free_own_desc(desc);
+ 				mutex_unlock(&achip->conn_lock);
++				status = AE_NO_MEMORY;
+ 				goto out;
+ 			}
+ 
+@@ -1070,8 +1105,7 @@ acpi_gpio_adr_space_handler(u32 function
+ 		mutex_unlock(&achip->conn_lock);
+ 
+ 		if (function == ACPI_WRITE)
+-			gpiod_set_raw_value_cansleep(desc,
+-						     !!((1 << i) & *value));
++			gpiod_set_raw_value_cansleep(desc, !!(*value & BIT(i)));
+ 		else
+ 			*value |= (u64)gpiod_get_raw_value_cansleep(desc) << i;
+ 	}
+@@ -1132,7 +1166,7 @@ acpi_gpiochip_parse_own_gpio(struct acpi
+ 	int ret;
+ 
+ 	*lflags = GPIO_LOOKUP_FLAGS_DEFAULT;
+-	*dflags = 0;
++	*dflags = GPIOD_ASIS;
+ 	*name = NULL;
+ 
+ 	ret = fwnode_property_read_u32_array(fwnode, "gpios", gpios,
+diff -Narup a/drivers/gpio/gpiolib-acpi.h b/drivers/gpio/gpiolib-acpi.h
+--- a/drivers/gpio/gpiolib-acpi.h	2020-12-14 06:41:30.000000000 +0800
++++ b/drivers/gpio/gpiolib-acpi.h	2020-12-22 13:45:48.396976098 +0800
+@@ -18,6 +18,7 @@ struct acpi_device;
+  * @pin_config: pin bias as provided by ACPI
+  * @polarity: interrupt polarity as provided by ACPI
+  * @triggering: triggering type as provided by ACPI
++ * @debounce: debounce timeout as provided by ACPI
+  * @quirks: Linux specific quirks as provided by struct acpi_gpio_mapping
+  */
+ struct acpi_gpio_info {
+@@ -27,6 +28,7 @@ struct acpi_gpio_info {
+ 	int pin_config;
+ 	int polarity;
+ 	int triggering;
++	unsigned int debounce;
+ 	unsigned int quirks;
+ };
+ 
+diff -Narup a/drivers/gpio/gpiolib.c b/drivers/gpio/gpiolib.c
+--- a/drivers/gpio/gpiolib.c	2020-12-14 06:41:30.000000000 +0800
++++ b/drivers/gpio/gpiolib.c	2020-12-22 14:28:08.770149915 +0800
+@@ -1477,7 +1477,8 @@ static void gpiochip_set_irq_hooks(struc
+ 	if (WARN_ON(gc->irq.irq_enable))
+ 		return;
+ 	/* Check if the irqchip already has this hook... */
+-	if (irqchip->irq_enable == gpiochip_irq_enable) {
++	if (irqchip->irq_enable == gpiochip_irq_enable ||
++		irqchip->irq_mask == gpiochip_irq_mask) {
+ 		/*
+ 		 * ...and if so, give a gentle warning that this is bad
+ 		 * practice.
+@@ -1985,11 +1986,9 @@ static int gpiod_request_commit(struct g
+ 
+ 	if (test_and_set_bit(FLAG_REQUESTED, &desc->flags) == 0) {
+ 		desc_set_label(desc, label ? : "?");
+-		ret = 0;
+ 	} else {
+-		kfree_const(label);
+ 		ret = -EBUSY;
+-		goto done;
++		goto out_free_unlock;
+ 	}
+ 
+ 	if (gc->request) {
+@@ -2002,11 +2001,10 @@ static int gpiod_request_commit(struct g
+ 			ret = -EINVAL;
+ 		spin_lock_irqsave(&gpio_lock, flags);
+ 
+-		if (ret < 0) {
++		if (ret) {
+ 			desc_set_label(desc, NULL);
+-			kfree_const(label);
+ 			clear_bit(FLAG_REQUESTED, &desc->flags);
+-			goto done;
++			goto out_free_unlock;
+ 		}
+ 	}
+ 	if (gc->get_direction) {
+@@ -2015,8 +2013,13 @@ static int gpiod_request_commit(struct g
+ 		gpiod_get_direction(desc);
+ 		spin_lock_irqsave(&gpio_lock, flags);
+ 	}
+-done:
++
++	spin_unlock_irqrestore(&gpio_lock, flags);
++	return 0;
++
++out_free_unlock:
+ 	spin_unlock_irqrestore(&gpio_lock, flags);
++	kfree_const(label);
+ 	return ret;
+ }
+ 
+@@ -2068,7 +2071,7 @@ int gpiod_request(struct gpio_desc *desc
+ 
+ 	if (try_module_get(gdev->owner)) {
+ 		ret = gpiod_request_commit(desc, label);
+-		if (ret < 0)
++		if (ret)
+ 			module_put(gdev->owner);
+ 		else
+ 			get_device(&gdev->dev);
+@@ -2251,30 +2254,49 @@ static int gpio_do_set_config(struct gpi
+ 	return gc->set_config(gc, offset, config);
+ }
+ 
+-static int gpio_set_config(struct gpio_desc *desc, enum pin_config_param mode)
++static int gpio_set_config_with_argument(struct gpio_desc *desc,
++					 enum pin_config_param mode,
++					 u32 argument)
+ {
+ 	struct gpio_chip *gc = desc->gdev->chip;
+ 	unsigned long config;
+-	unsigned arg;
++
++	config = pinconf_to_config_packed(mode, argument);
++	return gpio_do_set_config(gc, gpio_chip_hwgpio(desc), config);
++}
++
++static int gpio_set_config_with_argument_optional(struct gpio_desc *desc,
++						  enum pin_config_param mode,
++						  u32 argument)
++{
++	struct device *dev = &desc->gdev->dev;
++	int gpio = gpio_chip_hwgpio(desc);
++	int ret;
++
++	ret = gpio_set_config_with_argument(desc, mode, argument);
++	if (ret != -ENOTSUPP)
++		return ret;
+ 
+ 	switch (mode) {
+-	case PIN_CONFIG_BIAS_PULL_DOWN:
+-	case PIN_CONFIG_BIAS_PULL_UP:
+-		arg = 1;
++	case PIN_CONFIG_PERSIST_STATE:
++		dev_dbg(dev, "Persistence not supported for GPIO %d\n", gpio);
+ 		break;
+-
+ 	default:
+-		arg = 0;
++		break;
+ 	}
+ 
+-	config = PIN_CONF_PACKED(mode, arg);
+-	return gpio_do_set_config(gc, gpio_chip_hwgpio(desc), config);
++	return 0;
++}
++
++static int gpio_set_config(struct gpio_desc *desc, enum pin_config_param mode)
++{
++	return gpio_set_config_with_argument(desc, mode, 0);
+ }
+ 
+ static int gpio_set_bias(struct gpio_desc *desc)
+ {
+-	int bias = 0;
+-	int ret = 0;
++	enum pin_config_param bias;
++	unsigned int arg;
+ 
+ 	if (test_bit(FLAG_BIAS_DISABLE, &desc->flags))
+ 		bias = PIN_CONFIG_BIAS_DISABLE;
+@@ -2282,13 +2304,28 @@ static int gpio_set_bias(struct gpio_des
+ 		bias = PIN_CONFIG_BIAS_PULL_UP;
+ 	else if (test_bit(FLAG_PULL_DOWN, &desc->flags))
+ 		bias = PIN_CONFIG_BIAS_PULL_DOWN;
++	else
++		return 0;
+ 
+-	if (bias) {
+-		ret = gpio_set_config(desc, bias);
+-		if (ret != -ENOTSUPP)
+-			return ret;
++	switch (bias) {
++	case PIN_CONFIG_BIAS_PULL_DOWN:
++	case PIN_CONFIG_BIAS_PULL_UP:
++		arg = 1;
++		break;
++
++	default:
++		arg = 0;
++		break;
+ 	}
+-	return 0;
++
++	return gpio_set_config_with_argument_optional(desc, bias, arg);
++}
++
++int gpio_set_debounce_timeout(struct gpio_desc *desc, unsigned int debounce)
++{
++	return gpio_set_config_with_argument_optional(desc,
++						      PIN_CONFIG_INPUT_DEBOUNCE,
++						      debounce);
+ }
+ 
+ /**
+@@ -2529,11 +2566,6 @@ EXPORT_SYMBOL_GPL(gpiod_set_debounce);
+  */
+ int gpiod_set_transitory(struct gpio_desc *desc, bool transitory)
+ {
+-	struct gpio_chip *gc;
+-	unsigned long packed;
+-	int gpio;
+-	int rc;
+-
+ 	VALIDATE_DESC(desc);
+ 	/*
+ 	 * Handle FLAG_TRANSITORY first, enabling queries to gpiolib for
+@@ -2542,21 +2574,9 @@ int gpiod_set_transitory(struct gpio_des
+ 	assign_bit(FLAG_TRANSITORY, &desc->flags, transitory);
+ 
+ 	/* If the driver supports it, set the persistence state now */
+-	gc = desc->gdev->chip;
+-	if (!gc->set_config)
+-		return 0;
+-
+-	packed = pinconf_to_config_packed(PIN_CONFIG_PERSIST_STATE,
+-					  !transitory);
+-	gpio = gpio_chip_hwgpio(desc);
+-	rc = gpio_do_set_config(gc, gpio, packed);
+-	if (rc == -ENOTSUPP) {
+-		dev_dbg(&desc->gdev->dev, "Persistence not supported for GPIO %d\n",
+-				gpio);
+-		return 0;
+-	}
+-
+-	return rc;
++	return gpio_set_config_with_argument_optional(desc,
++						      PIN_CONFIG_PERSIST_STATE,
++						      !transitory);
+ }
+ EXPORT_SYMBOL_GPL(gpiod_set_transitory);
+ 
+@@ -3784,7 +3804,7 @@ struct gpio_desc *fwnode_gpiod_get_index
+ 
+ 		desc = fwnode_get_named_gpiod(fwnode, prop_name, index, flags,
+ 					      label);
+-		if (!IS_ERR(desc) || (PTR_ERR(desc) != -ENOENT))
++		if (!gpiod_not_found(desc))
+ 			break;
+ 	}
+ 
+@@ -3960,7 +3980,7 @@ struct gpio_desc *__must_check gpiod_get
+ 	 * Either we are not using DT or ACPI, or their lookup did not return
+ 	 * a result. In that case, use platform lookup as a fallback.
+ 	 */
+-	if (!desc || desc == ERR_PTR(-ENOENT)) {
++	if (!desc || gpiod_not_found(desc)) {
+ 		dev_dbg(dev, "using lookup tables for GPIO lookup\n");
+ 		desc = gpiod_find(dev, con_id, idx, &lookupflags);
+ 	}
+@@ -3975,7 +3995,7 @@ struct gpio_desc *__must_check gpiod_get
+ 	 * the device name as label
+ 	 */
+ 	ret = gpiod_request(desc, con_id ? con_id : devname);
+-	if (ret < 0) {
++	if (ret ) {
+ 		if (ret == -EBUSY && flags & GPIOD_FLAGS_BIT_NONEXCLUSIVE) {
+ 			/*
+ 			 * This happens when there are several consumers for
+@@ -4095,10 +4115,8 @@ struct gpio_desc *__must_check gpiod_get
+ 	struct gpio_desc *desc;
+ 
+ 	desc = gpiod_get_index(dev, con_id, index, flags);
+-	if (IS_ERR(desc)) {
+-		if (PTR_ERR(desc) == -ENOENT)
+-			return NULL;
+-	}
++	if (gpiod_not_found(desc))
++		return NULL;
+ 
+ 	return desc;
+ }
+@@ -4300,7 +4318,7 @@ struct gpio_descs *__must_check gpiod_ge
+ 	struct gpio_descs *descs;
+ 
+ 	descs = gpiod_get_array(dev, con_id, flags);
+-	if (PTR_ERR(descs) == -ENOENT)
++	if (gpiod_not_found(descs))
+ 		return NULL;
+ 
+ 	return descs;
+diff -Narup a/drivers/gpio/gpiolib.h b/drivers/gpio/gpiolib.h
+--- a/drivers/gpio/gpiolib.h	2020-12-14 06:41:30.000000000 +0800
++++ b/drivers/gpio/gpiolib.h	2020-12-22 14:05:04.658807802 +0800
+@@ -116,6 +116,7 @@ struct gpio_desc {
+ #define FLAG_BIAS_DISABLE    15	/* GPIO has pull disabled */
+ #define FLAG_EDGE_RISING     16	/* GPIO CDEV detects rising edge events */
+ #define FLAG_EDGE_FALLING    17	/* GPIO CDEV detects falling edge events */
++#define FLAG_EVENT_CLOCK_REALTIME	18 /* GPIO CDEV reports REALTIME timestamps in events */
+ 
+ 	/* Connection label */
+ 	const char		*label;
+@@ -130,10 +131,13 @@ struct gpio_desc {
+ #endif
+ };
+ 
++#define gpiod_not_found(desc)		(IS_ERR(desc) && PTR_ERR(desc) == -ENOENT)
++
+ int gpiod_request(struct gpio_desc *desc, const char *label);
+ void gpiod_free(struct gpio_desc *desc);
+ int gpiod_configure_flags(struct gpio_desc *desc, const char *con_id,
+ 		unsigned long lflags, enum gpiod_flags dflags);
++int gpio_set_debounce_timeout(struct gpio_desc *desc, unsigned int debounce);
+ int gpiod_hog(struct gpio_desc *desc, const char *name,
+ 		unsigned long lflags, enum gpiod_flags dflags);
+ 
