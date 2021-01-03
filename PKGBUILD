@@ -15,7 +15,7 @@ _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
 pkgver=5.10.4
-pkgrel=2
+pkgrel=3
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -37,13 +37,12 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         'config' 'config.anbox'
         # ARCH Patches
         '0001-ZEN-Add-sysctl-and-CONFIG-to-disallow-unprivileged-CLONE_NEWUSER.patch'
-#        '0002-Bluetooth-Fix-LL-PRivacy-BLE-device-fails-to-connect.patch'
         '0003-Bluetooth-Fix-attempting-to-set-RPA-timeout-when-unsupported.patch'
         '0004-HID-quirks-Add-Apple-Magic-Trackpad-2-to-hid_have_special_driver-list.patch.patch'
         '0005-drm-amd-display-Add-get_dig_frontend-implementation-for-DCEx.patch'
-#        '0006-drm-amdgpu-only-set-DP-subconnector-type-on-DP-and-eDP-connectors.patch'
         '0007-btrfs-Fix-500-2000-performance-regression-w5.10.patch'
         '0008-iwlwifi-Fix-regression-from-UDP-segmentation-support.patch'
+        '0009-ALSA-hda-hdmi-Fix-incorrect-mutex-unlock-in-silent-stream-disable.patch'
         # MANJARO Patches
         '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
         '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
@@ -52,7 +51,6 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0106-ucsi-acpi.patch'
         '0106-ucsi.patch'
         # Lenovo + AMD
-#        '0301-lenovo-amd-gpio.patch'
         '0302-lenovo-wmi2.patch'
         # Bootsplash
         '0401-revert-fbcon-remove-now-unusued-softback_lines-cursor-argument.patch'        
@@ -75,7 +73,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '0089cea5866978effd79567fdfdffe0ae950747f32a56e5f00b98d38e686f5b1'
-            '97cdf15e1c8ec40270780c7d37e7b76f8d730f22179e3affd4e65adda6cf4c80'
+            '16f38d7ef96fa691e1ea99b149020b5652d2b1987d5944d8d2edc5ee79d9714d'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             'e216346f7c7761a53b76dea0638898e52aac9e4527a64893c9dfa9936b3c5a0d'
@@ -83,6 +81,7 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '56ca378a03341bbe8ddd13a5630922b0c4e0d505b738aec3b21dcfa55ff200d7'
             'fe2bdf14a6a011571ce45b8ccd8399776e17d50d0f5852d7364b738fd1a59c9c'
             '5791e6fd2ae2f4938b1190af65da3213cbfa2b3e7f50e6dcfdc8ded3ca17d720'
+            '4696880b7d447af6814cfa214153931b6a7501257643b73274e49a330476a12e'
             '7823d7488f42bc4ed7dfae6d1014dbde679d8b862c9a3697a39ba0dae5918978'
             '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
             'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
