@@ -15,7 +15,7 @@ _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
 pkgver=5.10.7
-pkgrel=2
+pkgrel=3
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -41,6 +41,8 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0003-iwlwifi-Fix-regression-from-UDP-segmentation-support.patch'
         '0004-btrfs-fix-deadlock-when-cloning-inline-extent-and-low-on-free.patch'
         '0005-btrfs-shrink-delalloc-pages-instead-of-full-inodes.patch'
+        # Temp Fixes
+        '0008-revert-display-mode-vba-20v2c.patch'
         # MANJARO Patches
         '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
         '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
@@ -68,17 +70,17 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0511-bootsplash.patch'
         '0512-bootsplash.patch'
         '0513-bootsplash.gitpatch'
-        # Temp Fixes
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '8ecf194fbba49edf9014112f15928f0e869355ebe305b98a99db6f2674a931c2'
-            '07d7c78e899572ccf94d4f91a60f8e0a94948197fbd4d4883163aef43177a36d'
+            '6abf5abf90feedb33b7e8d91be137c5030445b7dcc25b31baae651c81612b74d'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             'df5843818f1571841e1a8bdbe38d7f853d841f38de46d6a6a5765de089495578'
             '5791e6fd2ae2f4938b1190af65da3213cbfa2b3e7f50e6dcfdc8ded3ca17d720'
             '8af6a4d5592b8dcfc6524563f08b81198ba1c71009b4b1e79538cb5d733aa772'
             'df04644aa42d820ead431e92632d232e683a66fb3c6301615e4ce961e930cd73'
+            'b918b1e8ec3a6063c750f173d6a71991ec7a5aa997dd4e186545cd28c3c58242'
             '7823d7488f42bc4ed7dfae6d1014dbde679d8b862c9a3697a39ba0dae5918978'
             '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
             'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
