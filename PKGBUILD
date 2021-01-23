@@ -14,7 +14,7 @@ pkgname=('linux510' 'linux510-headers')
 _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
-pkgver=5.10.9
+pkgver=5.10.10
 pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
@@ -69,8 +69,8 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0513-bootsplash.gitpatch'
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
-            '90cf5582f25ded6d5935b54fc20758e2c47915a4d5fe68d7298684557f631ff1'
-            '175952b880d5048d5246dc3d53e6e35e61bf7cfaa93b69ac2f933becd45a69b0'
+            'f60f800329a7461e5ff542f7f19e24a073f1e49a74f96dfb5d45a899f6a9cad8'
+            '7eb1e9b7695756a2fa98138c2cd02029feb194cb94d029a2d51187258eee2fec'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             'df5843818f1571841e1a8bdbe38d7f853d841f38de46d6a6a5765de089495578'
