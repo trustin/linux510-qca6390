@@ -182,7 +182,7 @@ package_linux510-qca6390() {
 
   # Used by mkinitcpio to name the kernel
   echo "${pkgbase}" | install -Dm644 /dev/stdin "${pkgdir}/usr/lib/modules/${_kernver}/pkgbase"
-  echo "${_basekernel}-${CARCH}" | install -Dm644 /dev/stdin "${pkgdir}/usr/lib/modules/${_kernver}/kernelbase"
+  echo "${_basekernel}-qa6390-${CARCH}" | install -Dm644 /dev/stdin "${pkgdir}/usr/lib/modules/${_kernver}/kernelbase"
 
   # add kernel version
   echo "${pkgver}-${pkgrel}-QCA6390 x64" > "${pkgdir}/boot/${pkgbase}-${CARCH}.kver"
