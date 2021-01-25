@@ -9,8 +9,8 @@
 # Cloud Server
 _server=cpx51
 
-pkgbase=linux510
-pkgname=('linux510' 'linux510-headers')
+pkgbase=linux510-qca6390
+pkgname=('linux510-qca6390' 'linux510-qca6390-headers')
 _kernelname=-MANJARO
 _basekernel=5.10
 _basever=510
@@ -67,6 +67,8 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0511-bootsplash.patch'
         '0512-bootsplash.patch'
         '0513-bootsplash.gitpatch'
+        # Temp Fixes
+        '9999-ath11k-qca6390-bringup-202012140938.patch'
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             'f60f800329a7461e5ff542f7f19e24a073f1e49a74f96dfb5d45a899f6a9cad8'
@@ -98,7 +100,8 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             'e9f22cbb542591087d2d66dc6dc912b1434330ba3cd13d2df741d869a2c31e89'
             '27471eee564ca3149dd271b0817719b5565a9594dc4d884fe3dc51a5f03832bc'
             '60e295601e4fb33d9bf65f198c54c7eb07c0d1e91e2ad1e0dd6cd6e142cb266d'
-            '035ea4b2a7621054f4560471f45336b981538a40172d8f17285910d4e0e0b3ef')
+            '035ea4b2a7621054f4560471f45336b981538a40172d8f17285910d4e0e0b3ef'
+            '45f03bf04bf38b0387b5e988fccc4bbe58c978b9247b8b836e6e67e848a9b8eb')
 
 prepare() {
   cd "${srcdir}/linux-${_basekernel}"
@@ -157,8 +160,8 @@ build() {
   make ${MAKEFLAGS} LOCALVERSION= bzImage modules
 }
 
-package_linux510() {
-  pkgdesc="The ${pkgbase/linux/Linux} kernel and modules"
+package_linux510-qca6390() {
+  pkgdesc="The ${pkgbase/linux/Linux} kernel and modules with QCA6390 (AX500-DBS) support"
   depends=('coreutils' 'linux-firmware' 'kmod' 'mkinitcpio>=27')
   optdepends=('crda: to set the correct wireless channels of your country')
   provides=("linux=${pkgver}" VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE)
@@ -202,8 +205,8 @@ package_linux510() {
   install -Dt "${pkgdir}/usr/lib/modules/${_kernver}/build" -m644 vmlinux
 }
 
-package_linux510-headers() {
-  pkgdesc="Header files and scripts for building modules for ${pkgbase/linux/Linux} kernel"
+package_linux510-qca6390-headers() {
+  pkgdesc="Header files and scripts for building modules for ${pkgbase/linux/Linux} kernel with QCA6390 (AX500-DBS) support"
   depends=('gawk' 'python' 'libelf')
   provides=("linux-headers=$pkgver")
 

@@ -1,0 +1,2467 @@
+diff -urN a/drivers/bus/mhi/core/init.c b/drivers/bus/mhi/core/init.c
+--- a/drivers/bus/mhi/core/init.c	2021-01-22 16:45:27.470878260 +0900
++++ b/drivers/bus/mhi/core/init.c	2021-01-22 16:45:48.021276637 +0900
+@@ -153,7 +153,7 @@
+ 	/* Setup BHI_INTVEC IRQ */
+ 	ret = request_threaded_irq(mhi_cntrl->irq[0], mhi_intvec_handler,
+ 				   mhi_intvec_threaded_handler,
+-				   IRQF_SHARED | IRQF_NO_SUSPEND,
++				   IRQF_SHARED | IRQF_NOBALANCING,
+ 				   "bhi", mhi_cntrl);
+ 	if (ret)
+ 		return ret;
+@@ -171,7 +171,7 @@
+ 
+ 		ret = request_irq(mhi_cntrl->irq[mhi_event->irq],
+ 				  mhi_irq_handler,
+-				  IRQF_SHARED | IRQF_NO_SUSPEND,
++				  IRQF_SHARED | IRQF_NOBALANCING,
+ 				  "mhi", mhi_event);
+ 		if (ret) {
+ 			dev_err(dev, "Error requesting irq:%d for ev:%d\n",
+diff -urN a/drivers/bus/mhi/core/pm.c b/drivers/bus/mhi/core/pm.c
+--- a/drivers/bus/mhi/core/pm.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/bus/mhi/core/pm.c	2021-01-22 16:45:48.021276637 +0900
+@@ -55,12 +55,12 @@
+ 	},
+ 	{
+ 		MHI_PM_M0,
+-		MHI_PM_M0 | MHI_PM_M2 | MHI_PM_M3_ENTER |
++		MHI_PM_M0 | MHI_PM_M3_ENTER |
+ 		MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
+ 		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_FW_DL_ERR
+ 	},
+ 	{
+-		MHI_PM_M2,
++		MHI_PM_M0,
+ 		MHI_PM_M0 | MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
+ 		MHI_PM_LD_ERR_FATAL_DETECT
+ 	},
+diff -urN a/drivers/net/wireless/ath/ath11k/ce.c b/drivers/net/wireless/ath/ath11k/ce.c
+--- a/drivers/net/wireless/ath/ath11k/ce.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/ce.c	2021-01-22 16:45:48.021276637 +0900
+@@ -195,7 +195,7 @@
+ 	return false;
+ }
+ 
+-static void ath11k_ce_stop_shadow_timers(struct ath11k_base *ab)
++void ath11k_ce_stop_shadow_timers(struct ath11k_base *ab)
+ {
+ 	int i;
+ 
+@@ -459,20 +459,22 @@
+ 	u32 msi_irq_start;
+ 	u32 addr_lo;
+ 	u32 addr_hi;
++	u32 vectors_32_capability;
+ 	int ret;
+ 
+ 	ret = ath11k_get_user_msi_vector(ab, "CE",
+ 					 &msi_data_count, &msi_data_start,
+ 					 &msi_irq_start);
+-
+ 	if (ret)
+ 		return;
++	vectors_32_capability = ab->hif.ops->is_32_vecs_support(ab);
+ 
+ 	ath11k_get_msi_address(ab, &addr_lo, &addr_hi);
+ 
+ 	ring_params->msi_addr = addr_lo;
+ 	ring_params->msi_addr |= (dma_addr_t)(((uint64_t)addr_hi) << 32);
+-	ring_params->msi_data = (ce_id % msi_data_count) + msi_data_start;
++	ring_params->msi_data = vectors_32_capability ?
++		(ce_id % msi_data_count) + msi_data_start : msi_data_start;
+ 	ring_params->flags |= HAL_SRNG_FLAGS_MSI_INTR;
+ }
+ 
+diff -urN a/drivers/net/wireless/ath/ath11k/ce.h b/drivers/net/wireless/ath/ath11k/ce.h
+--- a/drivers/net/wireless/ath/ath11k/ce.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/ce.h	2021-01-22 16:45:48.021276637 +0900
+@@ -190,4 +190,6 @@
+ int ath11k_ce_attr_attach(struct ath11k_base *ab);
+ void ath11k_ce_get_shadow_config(struct ath11k_base *ab,
+ 				 u32 **shadow_cfg, u32 *shadow_cfg_len);
++void ath11k_ce_stop_shadow_timers(struct ath11k_base *ab);
++
+ #endif
+diff -urN a/drivers/net/wireless/ath/ath11k/core.c b/drivers/net/wireless/ath/ath11k/core.c
+--- a/drivers/net/wireless/ath/ath11k/core.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/core.c	2021-01-22 16:45:48.021276637 +0900
+@@ -12,6 +12,7 @@
+ #include "dp_rx.h"
+ #include "debug.h"
+ #include "hif.h"
++#include "wow.h"
+ 
+ unsigned int ath11k_debug_mask;
+ EXPORT_SYMBOL(ath11k_debug_mask);
+@@ -50,7 +51,6 @@
+ 		.svc_to_ce_map = ath11k_target_service_to_ce_map_wlan_ipq8074,
+ 		.svc_to_ce_map_len = 21,
+ 		.single_pdev_only = false,
+-		.needs_band_to_mac = true,
+ 		.rxdma1_enable = true,
+ 		.num_rxmda_per_pdev = 1,
+ 		.rx_mac_buf_ring = false,
+@@ -65,6 +65,7 @@
+ 		.supports_monitor = true,
+ 		.supports_shadow_regs = false,
+ 		.idle_ps = false,
++		.support_suspend = false,
+ 	},
+ 	{
+ 		.hw_rev = ATH11K_HW_IPQ6018_HW10,
+@@ -87,7 +88,6 @@
+ 		.svc_to_ce_map = ath11k_target_service_to_ce_map_wlan_ipq6018,
+ 		.svc_to_ce_map_len = 19,
+ 		.single_pdev_only = false,
+-		.needs_band_to_mac = true,
+ 		.rxdma1_enable = true,
+ 		.num_rxmda_per_pdev = 1,
+ 		.rx_mac_buf_ring = false,
+@@ -102,6 +102,7 @@
+ 		.supports_monitor = true,
+ 		.supports_shadow_regs = false,
+ 		.idle_ps = false,
++		.support_suspend = false,
+ 	},
+ 	{
+ 		.name = "qca6390 hw2.0",
+@@ -124,7 +125,6 @@
+ 		.svc_to_ce_map = ath11k_target_service_to_ce_map_wlan_qca6390,
+ 		.svc_to_ce_map_len = 14,
+ 		.single_pdev_only = true,
+-		.needs_band_to_mac = false,
+ 		.rxdma1_enable = false,
+ 		.num_rxmda_per_pdev = 2,
+ 		.rx_mac_buf_ring = true,
+@@ -138,6 +138,7 @@
+ 		.supports_monitor = false,
+ 		.supports_shadow_regs = true,
+ 		.idle_ps = true,
++		.support_suspend = true,
+ 	},
+ };
+ 
+@@ -612,6 +613,15 @@
+ 		goto err_reo_cleanup;
+ 	}
+ 
++	// put hardware to DBS mode
++	if (ab->hw_params.single_pdev_only) {
++		ret = ath11k_wmi_set_hw_mode(ab, 1);
++		if (ret) {
++			ath11k_err(ab, "failed to send dbs mode: %d\n", ret);
++			goto err_hif_stop;
++		}
++	}
++
+ 	ret = ath11k_dp_tx_htt_h2t_ver_req_msg(ab);
+ 	if (ret) {
+ 		ath11k_err(ab, "failed to send htt version request message: %d\n",
+@@ -774,8 +784,10 @@
+ 		complete(&ar->scan.started);
+ 		complete(&ar->scan.completed);
+ 		complete(&ar->peer_assoc_done);
++		complete(&ar->peer_delete_done);
+ 		complete(&ar->install_key_done);
+ 		complete(&ar->vdev_setup_done);
++		complete(&ar->vdev_delete_done);
+ 		complete(&ar->bss_survey_done);
+ 		complete(&ar->thermal.wmi_sync);
+ 
+@@ -937,5 +949,45 @@
+ }
+ EXPORT_SYMBOL(ath11k_core_alloc);
+ 
++int ath11k_core_suspend(struct ath11k_base *ab)
++{
++	struct ath11k *ar = ab->pdevs[0].ar;
++	int ret = 0;
++
++	if (ab->hw_params.support_suspend) {
++		msleep(500);
++		ath11k_purge_rx_pktlog(ar, true);
++		ret = ath11k_wow_enable(ar);
++		if (ret)
++			return ret;
++
++		ath11k_purge_rx_pktlog(ar, false);
++		ath11k_ce_stop_shadow_timers(ab);
++		ath11k_dp_stop_shadow_timers(ab);
++
++		ath11k_hif_irq_disable(ab);
++		ath11k_hif_ce_irq_disable(ab);
++		return ath11k_hif_suspend(ab);
++	}
++	return 0;
++}
++EXPORT_SYMBOL(ath11k_core_suspend);
++
++int ath11k_core_resume(struct ath11k_base *ab)
++{
++	struct ath11k *ar = ab->pdevs[0].ar;
++
++	if (ab->hw_params.support_suspend) {
++		ath11k_hif_resume(ab);
++		ath11k_hif_ce_irq_enable(ab);
++		ath11k_hif_irq_enable(ab);
++		ath11k_enable_rx_pktlog(ar);
++		ath11k_wow_wakeup(ar);
++	}
++
++	return 0;
++}
++EXPORT_SYMBOL(ath11k_core_resume);
++
+ MODULE_DESCRIPTION("Core module for Qualcomm Atheros 802.11ax wireless LAN cards.");
+ MODULE_LICENSE("Dual BSD/GPL");
+diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/ath11k/core.h
+--- a/drivers/net/wireless/ath/ath11k/core.h	2021-01-22 16:45:27.517545816 +0900
++++ b/drivers/net/wireless/ath/ath11k/core.h	2021-01-22 16:45:48.021276637 +0900
+@@ -427,12 +427,17 @@
+ };
+ 
+ #define ATH11K_FLUSH_TIMEOUT (5 * HZ)
++#define ATH11K_VDEV_DELETE_TIMEOUT_HZ (5 * HZ)
+ 
+ struct ath11k_vdev_stop_status {
+ 	bool stop_in_progress;
+ 	u32  vdev_id;
+ };
+ 
++struct ath11k_wow {
++	struct completion wakeup_completed;
++};
++
+ struct ath11k {
+ 	struct ath11k_base *ab;
+ 	struct ath11k_pdev *pdev;
+@@ -502,6 +507,7 @@
+ 	u8 lmac_id;
+ 
+ 	struct completion peer_assoc_done;
++	struct completion peer_delete_done;
+ 
+ 	int install_key_status;
+ 	struct completion install_key_done;
+@@ -509,6 +515,7 @@
+ 	int last_wmi_vdev_start_status;
+ 	struct ath11k_vdev_stop_status vdev_stop_status;
+ 	struct completion vdev_setup_done;
++	struct completion vdev_delete_done;
+ 
+ 	int num_peers;
+ 	int max_num_peers;
+@@ -557,6 +564,9 @@
+ #endif
+ 	bool dfs_block_radar_events;
+ 	struct ath11k_thermal thermal;
++	struct completion target_suspend;
++	bool target_suspend_ack;
++	struct ath11k_wow wow;
+ };
+ 
+ struct ath11k_band_cap {
+@@ -685,6 +695,7 @@
+ 	bool wmi_ready;
+ 	u32 wlan_init_status;
+ 	int irq_num[ATH11K_IRQ_NUM_MAX];
++	int irq_enable_flag[ATH11K_IRQ_NUM_MAX];
+ 	struct ath11k_ext_irq_grp ext_irq_grp[ATH11K_EXT_IRQ_GRP_NUM_MAX];
+ 	struct napi_struct *napi;
+ 	struct ath11k_targ_cap target_caps;
+@@ -887,6 +898,8 @@
+ void ath11k_core_free_bdf(struct ath11k_base *ab, struct ath11k_board_data *bd);
+ 
+ void ath11k_core_halt(struct ath11k *ar);
++int ath11k_core_resume(struct ath11k_base *ab);
++int ath11k_core_suspend(struct ath11k_base *ab);
+ 
+ const struct firmware *ath11k_core_firmware_request(struct ath11k_base *ab,
+ 						    const char *filename);
+diff -urN a/drivers/net/wireless/ath/ath11k/dp.c b/drivers/net/wireless/ath/ath11k/dp.c
+--- a/drivers/net/wireless/ath/ath11k/dp.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp.c	2021-01-22 16:45:48.024610037 +0900
+@@ -180,13 +180,15 @@
+ {
+ 	int msi_group_number, msi_data_count;
+ 	u32 msi_data_start, msi_irq_start, addr_lo, addr_hi;
+-	int ret;
++	u32 vectors_32_capability;
++	int ret = -EINVAL;
+ 
+ 	ret = ath11k_get_user_msi_vector(ab, "DP",
+ 					 &msi_data_count, &msi_data_start,
+ 					 &msi_irq_start);
+ 	if (ret)
+ 		return;
++	vectors_32_capability = ab->hif.ops->is_32_vecs_support(ab);
+ 
+ 	msi_group_number = ath11k_dp_srng_calculate_msi_group(ab, type,
+ 							      ring_num);
+@@ -209,8 +211,8 @@
+ 
+ 	ring_params->msi_addr = addr_lo;
+ 	ring_params->msi_addr |= (dma_addr_t)(((uint64_t)addr_hi) << 32);
+-	ring_params->msi_data = (msi_group_number % msi_data_count)
+-		+ msi_data_start;
++	ring_params->msi_data = vectors_32_capability ?
++		(msi_group_number % msi_data_count) + msi_data_start : msi_data_start;
+ 	ring_params->flags |= HAL_SRNG_FLAGS_MSI_INTR;
+ }
+ 
+@@ -304,7 +306,7 @@
+ 	return 0;
+ }
+ 
+-static void ath11k_dp_stop_shadow_timers(struct ath11k_base *ab)
++void ath11k_dp_stop_shadow_timers(struct ath11k_base *ab)
+ {
+ 	int i;
+ 
+diff -urN a/drivers/net/wireless/ath/ath11k/dp.h b/drivers/net/wireless/ath/ath11k/dp.h
+--- a/drivers/net/wireless/ath/ath11k/dp.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp.h	2021-01-22 16:45:48.024610037 +0900
+@@ -40,6 +40,7 @@
+ 
+ #define DP_REO_DESC_FREE_THRESHOLD  64
+ #define DP_REO_DESC_FREE_TIMEOUT_MS 1000
++#define DP_MON_PURGE_TIMEOUT_MS     100
+ #define DP_MON_SERVICE_BUDGET       128
+ 
+ struct dp_reo_cache_flush_elem {
+@@ -1640,5 +1641,5 @@
+ void ath11k_dp_shadow_init_timer(struct ath11k_base *ab,
+ 				 struct ath11k_hp_update_timer *update_timer,
+ 				 u32 interval, u32 ring_id);
+-
++void ath11k_dp_stop_shadow_timers(struct ath11k_base *ab);
+ #endif
+diff -urN a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/ath11k/dp_rx.c
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c	2021-01-22 16:45:27.517545816 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c	2021-01-22 16:45:48.024610037 +0900
+@@ -274,6 +274,29 @@
+ 		  msecs_to_jiffies(ATH11K_MON_TIMER_INTERVAL));
+ }
+ 
++int ath11k_dp_purge_mon_ring(struct ath11k_base *ab)
++{
++	int i, buf_reaped = 0;
++	unsigned long ts = jiffies;
++
++again:
++	for (i = 0; i < ab->hw_params.num_rxmda_per_pdev; i++) {
++		buf_reaped += ath11k_dp_rx_process_mon_rings(ab, i,
++							     NULL,
++							     DP_MON_SERVICE_BUDGET);
++	}
++
++	/* nothing more to reap */
++	if (buf_reaped < DP_MON_SERVICE_BUDGET)
++		return 0;
++
++	if (time_after(jiffies, ts +
++		       msecs_to_jiffies(DP_MON_PURGE_TIMEOUT_MS)))
++		return -ETIMEDOUT;
++
++	goto again;
++}
++
+ /* Returns number of Rx buffers replenished */
+ int ath11k_dp_rxbufs_replenish(struct ath11k_base *ab, int mac_id,
+ 			       struct dp_rxdma_ring *rx_ring,
+@@ -2719,7 +2742,7 @@
+ 
+ 	paddr = dma_map_single(ab->dev, skb->data,
+ 			       skb->len + skb_tailroom(skb),
+-			       DMA_BIDIRECTIONAL);
++			       DMA_FROM_DEVICE);
+ 	if (unlikely(dma_mapping_error(ab->dev, paddr)))
+ 		goto fail_free_skb;
+ 
+@@ -2735,7 +2758,7 @@
+ 
+ fail_dma_unmap:
+ 	dma_unmap_single(ab->dev, paddr, skb->len + skb_tailroom(skb),
+-			 DMA_BIDIRECTIONAL);
++			 DMA_FROM_DEVICE);
+ fail_free_skb:
+ 	dev_kfree_skb_any(skb);
+ fail_alloc_skb:
+@@ -2799,7 +2822,7 @@
+ 	idr_remove(&rx_ring->bufs_idr, buf_id);
+ 	spin_unlock_bh(&rx_ring->idr_lock);
+ 	dma_unmap_single(ab->dev, paddr, skb->len + skb_tailroom(skb),
+-			 DMA_BIDIRECTIONAL);
++			 DMA_FROM_DEVICE);
+ 	dev_kfree_skb_any(skb);
+ 	ath11k_hal_srng_access_end(ab, srng);
+ 	spin_unlock_bh(&srng->lock);
+@@ -2866,7 +2889,7 @@
+ 
+ 			dma_unmap_single(ab->dev, rxcb->paddr,
+ 					 skb->len + skb_tailroom(skb),
+-					 DMA_BIDIRECTIONAL);
++					 DMA_FROM_DEVICE);
+ 
+ 			tlv = (struct hal_tlv_hdr *)skb->data;
+ 			if (FIELD_GET(HAL_TLV_HDR_TAG, tlv->tl) !=
+diff -urN a/drivers/net/wireless/ath/ath11k/dp_rx.h b/drivers/net/wireless/ath/ath11k/dp_rx.h
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.h	2021-01-22 16:45:48.027943436 +0900
+@@ -90,5 +90,5 @@
+ int ath11k_dp_rx_pdev_mon_detach(struct ath11k *ar);
+ int ath11k_dp_rx_pdev_mon_attach(struct ath11k *ar);
+ int ath11k_peer_rx_frag_setup(struct ath11k *ar, const u8 *peer_mac, int vdev_id);
+-
++int ath11k_dp_purge_mon_ring(struct ath11k_base *ab);
+ #endif /* ATH11K_DP_RX_H */
+diff -urN a/drivers/net/wireless/ath/ath11k/hif.h b/drivers/net/wireless/ath/ath11k/hif.h
+--- a/drivers/net/wireless/ath/ath11k/hif.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/hif.h	2021-01-22 16:45:48.027943436 +0900
+@@ -17,6 +17,9 @@
+ 	void (*stop)(struct ath11k_base *sc);
+ 	int (*power_up)(struct ath11k_base *sc);
+ 	void (*power_down)(struct ath11k_base *sc);
++	void (*target_crash)(struct ath11k_base *sc);
++	int (*suspend)(struct ath11k_base *ab);
++	int (*resume)(struct ath11k_base *ab);
+ 	int (*map_service_to_pipe)(struct ath11k_base *sc, u16 service_id,
+ 				   u8 *ul_pipe, u8 *dl_pipe);
+ 	int (*get_user_msi_vector)(struct ath11k_base *ab, char *user_name,
+@@ -24,8 +27,23 @@
+ 				   u32 *base_vector);
+ 	void (*get_msi_address)(struct ath11k_base *ab, u32 *msi_addr_lo,
+ 				u32 *msi_addr_hi);
++	int (*is_32_vecs_support)(struct ath11k_base *ab);
++	void (*ce_irq_enable)(struct ath11k_base *ab);
++	void (*ce_irq_disable)(struct ath11k_base *ab);
+ };
+ 
++static inline void ath11k_hif_ce_irq_enable(struct ath11k_base *ab)
++{
++	if (ab->hif.ops->ce_irq_enable)
++		ab->hif.ops->ce_irq_enable(ab);
++}
++
++static inline void ath11k_hif_ce_irq_disable(struct ath11k_base *ab)
++{
++	if (ab->hif.ops->ce_irq_disable)
++		ab->hif.ops->ce_irq_disable(ab);
++}
++
+ static inline int ath11k_hif_start(struct ath11k_base *sc)
+ {
+ 	return sc->hif.ops->start(sc);
+@@ -56,6 +74,21 @@
+ 	sc->hif.ops->power_down(sc);
+ }
+ 
++static inline int ath11k_hif_suspend(struct ath11k_base *sc)
++{
++	return sc->hif.ops->suspend(sc);
++}
++
++static inline int ath11k_hif_resume(struct ath11k_base *ab)
++{
++	return ab->hif.ops->resume(ab);
++}
++
++static inline void ath11k_hif_force_crash(struct ath11k_base *ab)
++{
++	ab->hif.ops->target_crash(ab);
++}
++
+ static inline u32 ath11k_hif_read32(struct ath11k_base *sc, u32 address)
+ {
+ 	return sc->hif.ops->read32(sc, address);
+diff -urN a/drivers/net/wireless/ath/ath11k/htc.c b/drivers/net/wireless/ath/ath11k/htc.c
+--- a/drivers/net/wireless/ath/ath11k/htc.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/htc.c	2021-01-22 16:45:48.027943436 +0900
+@@ -60,9 +60,11 @@
+ 	memset(hdr, 0, sizeof(*hdr));
+ 	hdr->htc_info = FIELD_PREP(HTC_HDR_ENDPOINTID, ep->eid) |
+ 			FIELD_PREP(HTC_HDR_PAYLOADLEN,
+-				   (skb->len - sizeof(*hdr))) |
+-			FIELD_PREP(HTC_HDR_FLAGS,
+-				   ATH11K_HTC_FLAG_NEED_CREDIT_UPDATE);
++				   (skb->len - sizeof(*hdr)));
++
++	if (ep->tx_credit_flow_enabled)
++		hdr->htc_info |= FIELD_PREP(HTC_HDR_FLAGS,
++					    ATH11K_HTC_FLAG_NEED_CREDIT_UPDATE);
+ 
+ 	spin_lock_bh(&ep->htc->tx_lock);
+ 	hdr->ctrl_info = FIELD_PREP(HTC_HDR_CONTROLBYTES1, ep->seq_no++);
+@@ -328,8 +330,18 @@
+ 
+ 			complete(&htc->ctl_resp);
+ 			break;
++		case ATH11K_HTC_MSG_SEND_SUSPEND_COMPLETE:
++			htc->htc_ops.target_send_suspend_complete(ab->pdevs[0].ar, true);
++			break;
++		case ATH11K_HTC_MSG_NACK_SUSPEND:
++			htc->htc_ops.target_send_suspend_complete(ab->pdevs[0].ar, false);
++			break;
++		case ATH11K_HTC_MSG_WAKEUP_FROM_SUSPEND_ID:
++			htc->htc_ops.target_wakeup_from_suspend(ab->pdevs[0].ar);
++			break;
+ 		default:
+-			ath11k_warn(ab, "ignoring unsolicited htc ep0 event\n");
++			ath11k_warn(ab, "ignoring unsolicited htc ep0 event %ld\n",
++				    FIELD_GET(HTC_MSG_MESSAGEID, msg->msg_svc_id));
+ 			break;
+ 		}
+ 		goto out;
+@@ -720,6 +732,19 @@
+ 	return 0;
+ }
+ 
++static void ath11k_send_suspend_complete(struct ath11k *ar, bool ack)
++{
++	ath11k_dbg(ar->ab, ATH11K_DBG_BOOT, "boot suspend complete %d\n", ack);
++
++	ar->target_suspend_ack = ack;
++	complete(&ar->target_suspend);
++}
++
++static void ath11k_wakeup_from_suspend(struct ath11k *ar)
++{
++	ath11k_dbg(ar->ab, ATH11K_DBG_BOOT, "wakeup from suspend is received\n");
++}
++
+ int ath11k_htc_init(struct ath11k_base *ab)
+ {
+ 	struct ath11k_htc *htc = &ab->htc;
+@@ -731,6 +756,11 @@
+ 
+ 	ath11k_htc_reset_endpoint_states(htc);
+ 
++	htc->htc_ops.target_send_suspend_complete =
++		ath11k_send_suspend_complete;
++	htc->htc_ops.target_wakeup_from_suspend =
++		ath11k_wakeup_from_suspend;
++
+ 	htc->ab = ab;
+ 
+ 	switch (ab->wmi_ab.preferred_hw_mode) {
+diff -urN a/drivers/net/wireless/ath/ath11k/htc.h b/drivers/net/wireless/ath/ath11k/htc.h
+--- a/drivers/net/wireless/ath/ath11k/htc.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/htc.h	2021-01-22 16:45:48.027943436 +0900
+@@ -13,6 +13,7 @@
+ #include <linux/timer.h>
+ 
+ struct ath11k_base;
++struct ath11k;
+ 
+ #define HTC_HDR_ENDPOINTID                       GENMASK(7, 0)
+ #define HTC_HDR_FLAGS                            GENMASK(15, 8)
+@@ -65,7 +66,10 @@
+ 	ATH11K_HTC_MSG_CONNECT_SERVICE_RESP_ID = 3,
+ 	ATH11K_HTC_MSG_SETUP_COMPLETE_ID       = 4,
+ 	ATH11K_HTC_MSG_SETUP_COMPLETE_EX_ID    = 5,
+-	ATH11K_HTC_MSG_SEND_SUSPEND_COMPLETE   = 6
++	ATH11K_HTC_MSG_SEND_SUSPEND_COMPLETE   = 6,
++	ATH11K_HTC_MSG_NACK_SUSPEND	       = 7,
++	ATH11K_HTC_MSG_WAKEUP_FROM_SUSPEND_ID  = 8
++
+ };
+ 
+ enum ath11k_htc_version {
+@@ -222,7 +226,8 @@
+ };
+ 
+ struct ath11k_htc_ops {
+-	void (*target_send_suspend_complete)(struct ath11k_base *ar);
++	void (*target_send_suspend_complete)(struct ath11k *ar, bool ack);
++	void (*target_wakeup_from_suspend)(struct ath11k *ar);
+ };
+ 
+ struct ath11k_htc_ep_ops {
+diff -urN a/drivers/net/wireless/ath/ath11k/hw.h b/drivers/net/wireless/ath/ath11k/hw.h
+--- a/drivers/net/wireless/ath/ath11k/hw.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/hw.h	2021-01-22 16:45:48.027943436 +0900
+@@ -143,12 +143,6 @@
+ 
+ 	bool single_pdev_only;
+ 
+-	/* For example on QCA6390 struct
+-	 * wmi_init_cmd_param::band_to_mac_config needs to be false as the
+-	 * firmware creates the mapping.
+-	 */
+-	bool needs_band_to_mac;
+-
+ 	bool rxdma1_enable;
+ 	int num_rxmda_per_pdev;
+ 	bool rx_mac_buf_ring;
+@@ -161,6 +155,7 @@
+ 	bool supports_monitor;
+ 	bool supports_shadow_regs;
+ 	bool idle_ps;
++	bool support_suspend;
+ };
+ 
+ struct ath11k_hw_ops {
+diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath11k/mac.c
+--- a/drivers/net/wireless/ath/ath11k/mac.c	2021-01-22 16:45:27.517545816 +0900
++++ b/drivers/net/wireless/ath/ath11k/mac.c	2021-01-22 16:45:48.027943436 +0900
+@@ -2986,6 +2986,7 @@
+ 	}
+ 
+ 	if (ab->hw_params.vdev_start_delay &&
++	    !arvif->is_started &&
+ 	    arvif->vdev_type != WMI_VDEV_TYPE_AP) {
+ 		ret = ath11k_start_vdev_delay(ar->hw, vif);
+ 		if (ret) {
+@@ -4116,6 +4117,10 @@
+ 						       &tlv_filter);
+ 	}
+ 
++	if (enable && !ar->ab->hw_params.rxdma1_enable)
++		mod_timer(&ar->ab->mon_reap_timer, jiffies +
++			  msecs_to_jiffies(ATH11K_MON_TIMER_INTERVAL));
++
+ 	return ret;
+ }
+ 
+@@ -4588,8 +4593,22 @@
+ 
+ err_peer_del:
+ 	if (arvif->vdev_type == WMI_VDEV_TYPE_AP) {
++		reinit_completion(&ar->peer_delete_done);
++
++		ret = ath11k_wmi_send_peer_delete_cmd(ar, vif->addr,
++						      arvif->vdev_id);
++		if (ret) {
++			ath11k_warn(ar->ab, "failed to delete peer vdev_id %d addr %pM\n",
++				    arvif->vdev_id, vif->addr);
++			return ret;
++		}
++
++		ret = ath11k_wait_for_peer_delete_done(ar, arvif->vdev_id,
++						       vif->addr);
++		if (ret)
++			return ret;
++
+ 		ar->num_peers--;
+-		ath11k_wmi_send_peer_delete_cmd(ar, vif->addr, arvif->vdev_id);
+ 	}
+ 
+ err_vdev_del:
+@@ -4624,6 +4643,7 @@
+ 	struct ath11k *ar = hw->priv;
+ 	struct ath11k_vif *arvif = ath11k_vif_to_arvif(vif);
+ 	struct ath11k_base *ab = ar->ab;
++	unsigned long time_left;
+ 	int ret;
+ 	int i;
+ 
+@@ -4632,10 +4652,6 @@
+ 	ath11k_dbg(ab, ATH11K_DBG_MAC, "mac remove interface (vdev %d)\n",
+ 		   arvif->vdev_id);
+ 
+-	spin_lock_bh(&ar->data_lock);
+-	list_del(&arvif->list);
+-	spin_unlock_bh(&ar->data_lock);
+-
+ 	if (arvif->vdev_type == WMI_VDEV_TYPE_AP) {
+ 		ret = ath11k_peer_delete(ar, arvif->vdev_id, vif->addr);
+ 		if (ret)
+@@ -4643,16 +4659,33 @@
+ 				    arvif->vdev_id, ret);
+ 	}
+ 
++	reinit_completion(&ar->vdev_delete_done);
++
+ 	ret = ath11k_wmi_vdev_delete(ar, arvif->vdev_id);
+-	if (ret)
++	if (ret) {
+ 		ath11k_warn(ab, "failed to delete WMI vdev %d: %d\n",
+ 			    arvif->vdev_id, ret);
++		goto err_vdev_del;
++	}
+ 
++	time_left = wait_for_completion_timeout(&ar->vdev_delete_done,
++						ATH11K_VDEV_DELETE_TIMEOUT_HZ);
++	if (time_left == 0) {
++		ath11k_warn(ab, "Timeout in receiving vdev delete response\n");
++		goto err_vdev_del;
++	}
++
++	ab->free_vdev_map |= 1LL << (arvif->vdev_id);
++	ar->allocated_vdev_map &= ~(1LL << arvif->vdev_id);
+ 	ar->num_created_vdevs--;
++
+ 	ath11k_dbg(ab, ATH11K_DBG_MAC, "vdev %pM deleted, vdev_id %d\n",
+ 		   vif->addr, arvif->vdev_id);
+-	ar->allocated_vdev_map &= ~(1LL << arvif->vdev_id);
+-	ab->free_vdev_map |= 1LL << (arvif->vdev_id);
++
++err_vdev_del:
++	spin_lock_bh(&ar->data_lock);
++	list_del(&arvif->list);
++	spin_unlock_bh(&ar->data_lock);
+ 
+ 	ath11k_peer_cleanup(ar, arvif->vdev_id);
+ 
+@@ -5233,7 +5266,8 @@
+ 	/* for QCA6390 bss peer must be created before vdev_start */
+ 	if (ab->hw_params.vdev_start_delay &&
+ 	    arvif->vdev_type != WMI_VDEV_TYPE_AP &&
+-	    arvif->vdev_type != WMI_VDEV_TYPE_MONITOR) {
++	    arvif->vdev_type != WMI_VDEV_TYPE_MONITOR &&
++	    !ath11k_peer_find_by_vdev_id(ab, arvif->vdev_id)) {
+ 		memcpy(&arvif->chanctx, ctx, sizeof(*ctx));
+ 		ret = 0;
+ 		goto out;
+@@ -5244,7 +5278,9 @@
+ 		goto out;
+ 	}
+ 
+-	if (ab->hw_params.vdev_start_delay) {
++	if (ab->hw_params.vdev_start_delay &&
++	    (arvif->vdev_type == WMI_VDEV_TYPE_AP ||
++	    arvif->vdev_type == WMI_VDEV_TYPE_MONITOR)) {
+ 		param.vdev_id = arvif->vdev_id;
+ 		param.peer_type = WMI_PEER_TYPE_DEFAULT;
+ 		param.peer_addr = ar->mac_addr;
+@@ -6411,12 +6447,16 @@
+ 		INIT_LIST_HEAD(&ar->ppdu_stats_info);
+ 		mutex_init(&ar->conf_mutex);
+ 		init_completion(&ar->vdev_setup_done);
++		init_completion(&ar->vdev_delete_done);
+ 		init_completion(&ar->peer_assoc_done);
++		init_completion(&ar->peer_delete_done);
+ 		init_completion(&ar->install_key_done);
+ 		init_completion(&ar->bss_survey_done);
+ 		init_completion(&ar->scan.started);
+ 		init_completion(&ar->scan.completed);
+ 		init_completion(&ar->thermal.wmi_sync);
++		init_completion(&ar->target_suspend);
++		init_completion(&ar->wow.wakeup_completed);
+ 
+ 		INIT_DELAYED_WORK(&ar->scan.timeout, ath11k_scan_timeout_work);
+ 		INIT_WORK(&ar->regd_update_work, ath11k_regd_update_work);
+@@ -6450,3 +6490,29 @@
+ 		pdev->ar = NULL;
+ 	}
+ }
++
++int ath11k_purge_rx_pktlog(struct ath11k *ar, bool stop_timer)
++{
++	int ret;
++
++	/* stop timer */
++	if (stop_timer)
++		del_timer_sync(&ar->ab->mon_reap_timer);
++
++	/* reap all the monitor related rings */
++	ret = ath11k_dp_purge_mon_ring(ar->ab);
++	if (ret)
++		ath11k_warn(ar->ab,
++			    "failed to purge mon_buf ring %d\n", ret);
++
++	return ret;
++}
++
++int ath11k_enable_rx_pktlog(struct ath11k *ar)
++{
++	/* start reap timer */
++	mod_timer(&ar->ab->mon_reap_timer, jiffies +
++				  msecs_to_jiffies(ATH11K_MON_TIMER_INTERVAL));
++
++	return 0;
++}
+diff -urN a/drivers/net/wireless/ath/ath11k/mac.h b/drivers/net/wireless/ath/ath11k/mac.h
+--- a/drivers/net/wireless/ath/ath11k/mac.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/mac.h	2021-01-22 16:45:48.031276835 +0900
+@@ -146,4 +146,6 @@
+ u8 ath11k_mac_bw_to_mac80211_bw(u8 bw);
+ enum ath11k_supported_bw ath11k_mac_mac80211_bw_to_ath11k_bw(enum rate_info_bw bw);
+ enum hal_encrypt_type ath11k_dp_tx_get_encrypt_type(u32 cipher);
++int ath11k_purge_rx_pktlog(struct ath11k *ar, bool stop_timer);
++int ath11k_enable_rx_pktlog(struct ath11k *ar);
+ #endif
+diff -urN a/drivers/net/wireless/ath/ath11k/Makefile b/drivers/net/wireless/ath/ath11k/Makefile
+--- a/drivers/net/wireless/ath/ath11k/Makefile	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/Makefile	2021-01-22 16:45:48.031276835 +0900
+@@ -16,7 +16,8 @@
+ 	    ce.o \
+ 	    peer.o \
+ 	    dbring.o \
+-	    hw.o
++	    hw.o \
++	    wow.o
+ 
+ ath11k-$(CONFIG_ATH11K_DEBUGFS) += debugfs.o debugfs_htt_stats.o debugfs_sta.o
+ ath11k-$(CONFIG_NL80211_TESTMODE) += testmode.o
+diff -urN a/drivers/net/wireless/ath/ath11k/mhi.c b/drivers/net/wireless/ath/ath11k/mhi.c
+--- a/drivers/net/wireless/ath/ath11k/mhi.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/mhi.c	2021-01-22 16:45:48.031276835 +0900
+@@ -156,14 +156,17 @@
+ {
+ 	struct ath11k_base *ab = ab_pci->ab;
+ 	u32 user_base_data, base_vector;
++	u32 vectors_32_capability;
+ 	int ret, num_vectors, i;
+ 	int *irq;
++	unsigned int msi_data;
+ 
+ 	ret = ath11k_pci_get_user_msi_assignment(ab_pci,
+ 						 "MHI", &num_vectors,
+ 						 &user_base_data, &base_vector);
+ 	if (ret)
+ 		return ret;
++	vectors_32_capability = ab_pci->vectors_32_capability;
+ 
+ 	ath11k_dbg(ab, ATH11K_DBG_PCI, "Number of assigned MSI for MHI is %d, base vector is %d\n",
+ 		   num_vectors, base_vector);
+@@ -172,9 +175,13 @@
+ 	if (!irq)
+ 		return -ENOMEM;
+ 
+-	for (i = 0; i < num_vectors; i++)
++	for (i = 0; i < num_vectors; i++) {
++		msi_data = vectors_32_capability ?
++			   i + base_vector : base_vector;
++
+ 		irq[i] = ath11k_pci_get_msi_irq(ab->dev,
+-						base_vector + i);
++						msi_data);
++	}
+ 
+ 	ab_pci->mhi_ctrl->irq = irq;
+ 	ab_pci->mhi_ctrl->nr_irqs = num_vectors;
+@@ -194,6 +201,15 @@
+ static void ath11k_mhi_op_status_cb(struct mhi_controller *mhi_cntrl,
+ 				    enum mhi_callback cb)
+ {
++	struct ath11k_base *ab = dev_get_drvdata(mhi_cntrl->cntrl_dev);
++
++	switch (cb) {
++	case MHI_CB_SYS_ERROR:
++		ath11k_warn(ab, "firmware crashed: MHI_CB_SYS_ERROR\n");
++		break;
++	default:
++		break;
++	}
+ }
+ 
+ static int ath11k_mhi_op_read_reg(struct mhi_controller *mhi_cntrl,
+@@ -413,8 +429,10 @@
+ 		ret = 0;
+ 		break;
+ 	case ATH11K_MHI_SUSPEND:
++		ret = mhi_pm_suspend(ab_pci->mhi_ctrl);
+ 		break;
+ 	case ATH11K_MHI_RESUME:
++		ret = mhi_pm_resume(ab_pci->mhi_ctrl);
+ 		break;
+ 	case ATH11K_MHI_TRIGGER_RDDM:
+ 		ret = mhi_force_rddm_mode(ab_pci->mhi_ctrl);
+@@ -465,3 +483,18 @@
+ 	ath11k_mhi_set_state(ab_pci, ATH11K_MHI_DEINIT);
+ }
+ 
++void ath11k_mhi_suspend(struct ath11k_pci *ab_pci)
++{
++	ath11k_mhi_set_state(ab_pci, ATH11K_MHI_SUSPEND);
++}
++
++void ath11k_mhi_resume(struct ath11k_pci *ab_pci)
++{
++	ath11k_mhi_set_state(ab_pci, ATH11K_MHI_RESUME);
++}
++
++void ath11k_mhi_force_rddm(struct ath11k_pci *ab_pci)
++{
++	ath11k_mhi_set_state(ab_pci, ATH11K_MHI_TRIGGER_RDDM);
++}
++
+diff -urN a/drivers/net/wireless/ath/ath11k/mhi.h b/drivers/net/wireless/ath/ath11k/mhi.h
+--- a/drivers/net/wireless/ath/ath11k/mhi.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/mhi.h	2021-01-22 16:45:48.031276835 +0900
+@@ -36,4 +36,8 @@
+ void ath11k_mhi_set_mhictrl_reset(struct ath11k_base *ab);
+ void ath11k_mhi_clear_vector(struct ath11k_base *ab);
+ 
++void ath11k_mhi_suspend(struct ath11k_pci *ar_pci);
++void ath11k_mhi_resume(struct ath11k_pci *ar_pci);
++void ath11k_mhi_force_rddm(struct ath11k_pci *ar_pci);
++
+ #endif
+diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath11k/pci.c
+--- a/drivers/net/wireless/ath/ath11k/pci.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/pci.c	2021-01-22 16:45:48.031276835 +0900
+@@ -17,6 +17,7 @@
+ #define ATH11K_PCI_DMA_MASK		32
+ 
+ #define ATH11K_PCI_IRQ_CE0_OFFSET		3
++#define ATH11K_PCI_IRQ_DP_OFFSET		14
+ 
+ #define WINDOW_ENABLE_BIT		0x40000000
+ #define WINDOW_REG_ADDRESS		0x310c
+@@ -126,6 +127,7 @@
+ 	if (window != ab_pci->register_window) {
+ 		iowrite32(WINDOW_ENABLE_BIT | window,
+ 			  ab->mem + WINDOW_REG_ADDRESS);
++		ioread32(ab->mem + WINDOW_REG_ADDRESS);
+ 		ab_pci->register_window = window;
+ 	}
+ }
+@@ -239,15 +241,141 @@
+ 	ath11k_dbg(ab, ATH11K_DBG_PCI, "soc reset cause:%d\n", val);
+ }
+ 
++static bool ath11k_pci_set_link_reg(struct ath11k_base *ab,
++				    u32 offset, u32 value, u32 mask)
++{
++	u32 ret;
++	int count = 10;
++
++	ret = ath11k_pci_read32(ab, offset);
++	if ((ret & mask) == value)
++		return true;
++
++	while (count > 0) {
++		ath11k_pci_write32(ab, offset, (ret & ~mask) | value);
++		ret = ath11k_pci_read32(ab, offset);
++		if ((ret & mask) == value)
++			return true;
++
++		mdelay(2);
++		count--;
++	}
++
++	ath11k_err(ab, "%s: Failed to set Pcie Link Register 0x%08x to 0x%08x\n",
++		   __func__, offset, ret);
++	return false;
++}
++
++static void ath11k_pci_fix_l1ss(struct ath11k_base *ab)
++{
++	if (!ath11k_pci_set_link_reg(ab,
++				     PCIE_QSERDES_COM_SYSCLK_EN_SEL_REG,
++				     PCIE_QSERDES_COM_SYSCLK_EN_SEL_VAL,
++				     PCIE_QSERDES_COM_SYSCLK_EN_SEL_MSK)) {
++		ath11k_err(ab, "%s set sysclk error\n", __func__);
++		return;
++	}
++
++	if (!ath11k_pci_set_link_reg(ab,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG1_REG,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG1_VAL,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG_MSK)) {
++		ath11k_err(ab, "%s set dtct_config1 error\n", __func__);
++		return;
++	}
++
++	if (!ath11k_pci_set_link_reg(ab,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG2_REG,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG2_VAL,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG_MSK)) {
++		ath11k_err(ab, "%s set dtct_config2 error\n", __func__);
++		return;
++	}
++
++	if (!ath11k_pci_set_link_reg(ab,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG4_REG,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG4_VAL,
++				     PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG_MSK))
++		ath11k_err(ab, "%s set dtct_config4 error\n", __func__);
++}
++
++static void ath11k_pci_enable_LTSSM(struct ath11k_base *ab)
++{
++	u32 val;
++	int count = 5;
++
++	val = ath11k_pci_read32(ab, PCIE_PCIE_PARF_LTSSM);
++
++	/* PCIE link seems very unstable after the Hot Reset*/
++	while (val != PARM_LTSSM_VALUE && count--) {
++		if (val == 0xffffffff)
++			mdelay(5);
++		ath11k_pci_write32(ab, PCIE_PCIE_PARF_LTSSM, PARM_LTSSM_VALUE);
++
++		val = ath11k_pci_read32(ab, PCIE_PCIE_PARF_LTSSM);
++	}
++
++	ath11k_dbg(ab, ATH11K_DBG_PCI, "%s read parf_ltssm:0x%x\n",
++		   __func__, val);
++
++	val = ath11k_pci_read32(ab, GCC_GCC_PCIE_HOT_RST);
++
++	val |= GCC_GCC_PCIE_HOT_RST_VAL | 0x10;
++
++	ath11k_pci_write32(ab, GCC_GCC_PCIE_HOT_RST, val);
++
++	val = ath11k_pci_read32(ab, GCC_GCC_PCIE_HOT_RST);
++
++	ath11k_dbg(ab, ATH11K_DBG_PCI,
++		   "after set, read GCC_GCC_PCIE_HOT_RST 0x%x\n", val);
++
++	mdelay(5);
++}
++
++static void ath11k_pci_clear_all_intrs(struct ath11k_base *ab)
++{
++	/* This is a WAR for PCIE Hotreset.
++	 * When target receive Hotreset, but will set the interrupt.
++	 * So when download SBL again, SBL will open Interrupt and
++	 * receive it, and crash immediately.
++	 */
++	ath11k_pci_write32(ab, PCIE_PCIE_INT_ALL_CLEAR, PCIE_INT_CLEAR_ALL);
++}
++
++static void ath11k_pci_set_wlaon_pwr_ctrl(struct ath11k_base *ab, bool set_vdd4blow)
++{
++	u32 val;
++
++	val = ath11k_pci_read32(ab, WLAON_QFPROM_PWR_CTRL_REG);
++
++	if (set_vdd4blow)
++		val |= QFPROM_PWR_CTRL_VDD4BLOW_MASK;
++	else
++		val &= ~QFPROM_PWR_CTRL_VDD4BLOW_MASK;
++
++	ath11k_pci_write32(ab, WLAON_QFPROM_PWR_CTRL_REG, val);
++}
++
+ static void ath11k_pci_force_wake(struct ath11k_base *ab)
+ {
++	int val;
++
++	ath11k_pci_write32(ab, PCIE_SCRATCH_0_SOC_PCIE_REG, 0);
+ 	ath11k_pci_write32(ab, PCIE_SOC_WAKE_PCIE_LOCAL_REG, 1);
+-	mdelay(5);
++	mdelay(10);
++	val = ath11k_pci_read32(ab, PCIE_SCRATCH_0_SOC_PCIE_REG);
++	ath11k_dbg(ab, ATH11K_DBG_PCI, "forcw_wake scratch 0: 0x%x\n", val);
+ }
+ 
+-static void ath11k_pci_sw_reset(struct ath11k_base *ab)
++static void ath11k_pci_sw_reset(struct ath11k_base *ab, bool power_on)
+ {
+-	ath11k_pci_soc_global_reset(ab);
++	if (power_on) {
++		ath11k_pci_enable_LTSSM(ab);
++		ath11k_pci_clear_all_intrs(ab);
++		ath11k_pci_set_wlaon_pwr_ctrl(ab, false);
++		ath11k_pci_fix_l1ss(ab);
++	}
++
+ 	ath11k_mhi_clear_vector(ab);
+ 	ath11k_pci_soc_global_reset(ab);
+ 	ath11k_mhi_set_mhictrl_reset(ab);
+@@ -264,13 +392,18 @@
+ static void ath11k_pci_get_msi_address(struct ath11k_base *ab, u32 *msi_addr_lo,
+ 				       u32 *msi_addr_hi)
+ {
++	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
+ 	struct pci_dev *pci_dev = to_pci_dev(ab->dev);
+ 
+ 	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_LO,
+ 			      msi_addr_lo);
+ 
+-	pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_HI,
+-			      msi_addr_hi);
++	if (test_bit(ATH11K_PCI_FLAG_IS_MSI_64, &ab_pci->flags)) {
++		pci_read_config_dword(pci_dev, pci_dev->msi_cap + PCI_MSI_ADDRESS_HI,
++				      msi_addr_hi);
++	} else {
++		*msi_addr_hi = 0;
++	}
+ }
+ 
+ int ath11k_pci_get_user_msi_assignment(struct ath11k_pci *ab_pci, char *user_name,
+@@ -278,14 +411,15 @@
+ 				       u32 *base_vector)
+ {
+ 	struct ath11k_base *ab = ab_pci->ab;
++	u32 msi_32_cap = ab_pci->vectors_32_capability;
+ 	int idx;
+ 
+ 	for (idx = 0; idx < msi_config.total_users; idx++) {
+ 		if (strcmp(user_name, msi_config.users[idx].name) == 0) {
+ 			*num_vectors = msi_config.users[idx].num_vectors;
+-			*user_base_data = msi_config.users[idx].base_vector
+-				+ ab_pci->msi_ep_base_data;
+-			*base_vector = msi_config.users[idx].base_vector;
++			*base_vector = msi_32_cap ?
++				  msi_config.users[idx].base_vector : 0;
++			*user_base_data = *base_vector + ab_pci->msi_ep_base_data;
+ 
+ 			ath11k_dbg(ab, ATH11K_DBG_PCI, "Assign MSI to user: %s, num_vectors: %d, user_base_data: %u, base_vector: %u\n",
+ 				   user_name, *num_vectors, *user_base_data,
+@@ -339,20 +473,38 @@
+ 	ath11k_pci_free_ext_irq(ab);
+ }
+ 
++static void ath11k_pci_set_irq_enable_flag(struct ath11k_base *ab, u32 irq_idx, int flag)
++{
++	ab->irq_enable_flag[irq_idx] = flag;
++}
++
+ static void ath11k_pci_ce_irq_enable(struct ath11k_base *ab, u16 ce_id)
+ {
+ 	u32 irq_idx;
++	u32 vecs_32_cap;
+ 
+-	irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + ce_id;
+-	enable_irq(ab->irq_num[irq_idx]);
++	vecs_32_cap = ath11k_pci_priv(ab)->vectors_32_capability;
++	irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET  + ce_id;
++
++	if (vecs_32_cap)
++		enable_irq(ab->irq_num[irq_idx]);
++
++	ath11k_pci_set_irq_enable_flag(ab, irq_idx, 1);
+ }
+ 
+ static void ath11k_pci_ce_irq_disable(struct ath11k_base *ab, u16 ce_id)
+ {
+ 	u32 irq_idx;
++	u32 vecs_32_cap;
+ 
++	vecs_32_cap = ath11k_pci_priv(ab)->vectors_32_capability;
+ 	irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + ce_id;
+-	disable_irq_nosync(ab->irq_num[irq_idx]);
++
++	/* Cannot disable the irq when using one msi interrupt */
++	if (vecs_32_cap)
++		disable_irq_nosync(ab->irq_num[irq_idx]);
++
++	ath11k_pci_set_irq_enable_flag(ab, irq_idx, 0);
+ }
+ 
+ static void ath11k_pci_ce_irqs_disable(struct ath11k_base *ab)
+@@ -382,18 +534,28 @@
+ 
+ static void ath11k_pci_ce_tasklet(unsigned long data)
+ {
++
+ 	struct ath11k_ce_pipe *ce_pipe = (struct ath11k_ce_pipe *)data;
++	int irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + ce_pipe->pipe_num;
+ 
+ 	ath11k_ce_per_engine_service(ce_pipe->ab, ce_pipe->pipe_num);
+ 
+-	ath11k_pci_ce_irq_enable(ce_pipe->ab, ce_pipe->pipe_num);
++	enable_irq(ce_pipe->ab->irq_num[irq_idx]);
+ }
+ 
+ static irqreturn_t ath11k_pci_ce_interrupt_handler(int irq, void *arg)
+ {
+ 	struct ath11k_ce_pipe *ce_pipe = arg;
++	struct ath11k_base *ab = ce_pipe->ab;
++	int irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + ce_pipe->pipe_num;
++
++	disable_irq_nosync(ab->irq_num[irq_idx]);
++
++	if (!ab->irq_enable_flag[irq_idx]) {
++		enable_irq(ab->irq_num[irq_idx]);
++		return IRQ_HANDLED;
++	}
+ 
+-	ath11k_pci_ce_irq_disable(ce_pipe->ab, ce_pipe->pipe_num);
+ 	tasklet_schedule(&ce_pipe->intr_tq);
+ 
+ 	return IRQ_HANDLED;
+@@ -402,9 +564,16 @@
+ static void ath11k_pci_ext_grp_disable(struct ath11k_ext_irq_grp *irq_grp)
+ {
+ 	int i;
++	u32 vecs_32_cap;
+ 
+-	for (i = 0; i < irq_grp->num_irq; i++)
+-		disable_irq_nosync(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
++	vecs_32_cap = ath11k_pci_priv(irq_grp->ab)->vectors_32_capability;
++
++	for (i = 0; i < irq_grp->num_irq; i++) {
++		if (vecs_32_cap)
++			disable_irq_nosync(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
++
++		ath11k_pci_set_irq_enable_flag(irq_grp->ab, irq_grp->irqs[i], 0);
++	}
+ }
+ 
+ static void __ath11k_pci_ext_irq_disable(struct ath11k_base *sc)
+@@ -424,9 +593,15 @@
+ static void ath11k_pci_ext_grp_enable(struct ath11k_ext_irq_grp *irq_grp)
+ {
+ 	int i;
++	u32 vecs_32_cap;
+ 
+-	for (i = 0; i < irq_grp->num_irq; i++)
+-		enable_irq(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
++	vecs_32_cap = ath11k_pci_priv(irq_grp->ab)->vectors_32_capability;
++
++	for (i = 0; i < irq_grp->num_irq; i++) {
++		if (vecs_32_cap)
++			enable_irq(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
++		ath11k_pci_set_irq_enable_flag(irq_grp->ab, irq_grp->irqs[i], 1);
++	}
+ }
+ 
+ static void ath11k_pci_ext_irq_enable(struct ath11k_base *ab)
+@@ -468,11 +643,13 @@
+ 						napi);
+ 	struct ath11k_base *ab = irq_grp->ab;
+ 	int work_done;
++	int i;
+ 
+ 	work_done = ath11k_dp_service_srng(ab, irq_grp, budget);
+ 	if (work_done < budget) {
+ 		napi_complete_done(napi, work_done);
+-		ath11k_pci_ext_grp_enable(irq_grp);
++		for (i = 0; i < irq_grp->num_irq; i++)
++			enable_irq(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
+ 	}
+ 
+ 	if (work_done > budget)
+@@ -484,10 +661,16 @@
+ static irqreturn_t ath11k_pci_ext_interrupt_handler(int irq, void *arg)
+ {
+ 	struct ath11k_ext_irq_grp *irq_grp = arg;
++	int i;
+ 
+-	ath11k_dbg(irq_grp->ab, ATH11K_DBG_PCI, "ext irq:%d\n", irq);
++	for (i = 0; i < irq_grp->num_irq; i++)
++		disable_irq_nosync(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
+ 
+-	ath11k_pci_ext_grp_disable(irq_grp);
++	if (!irq_grp->ab->irq_enable_flag[irq_grp->irqs[0]]) {
++		for (i = 0; i < irq_grp->num_irq; i++)
++			enable_irq(irq_grp->ab->irq_num[irq_grp->irqs[i]]);
++		return IRQ_HANDLED;
++	}
+ 
+ 	napi_schedule(&irq_grp->napi);
+ 
+@@ -498,6 +681,7 @@
+ {
+ 	int i, j, ret, num_vectors = 0;
+ 	u32 user_base_data = 0, base_vector = 0;
++	u32 vecs_32_cap;
+ 
+ 	ret = ath11k_pci_get_user_msi_assignment(ath11k_pci_priv(ab), "DP",
+ 						 &num_vectors,
+@@ -506,6 +690,8 @@
+ 	if (ret < 0)
+ 		return ret;
+ 
++	vecs_32_cap = ath11k_pci_priv(ab)->vectors_32_capability;
++
+ 	for (i = 0; i < ATH11K_EXT_IRQ_GRP_NUM_MAX; i++) {
+ 		struct ath11k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
+ 		u32 num_irq = 0;
+@@ -528,11 +714,12 @@
+ 		}
+ 
+ 		irq_grp->num_irq = num_irq;
+-		irq_grp->irqs[0] = base_vector + i;
++		irq_grp->irqs[0] = ATH11K_PCI_IRQ_DP_OFFSET + i;
+ 
+ 		for (j = 0; j < irq_grp->num_irq; j++) {
+ 			int irq_idx = irq_grp->irqs[j];
+-			int vector = (i % num_vectors) + base_vector;
++			int vector = vecs_32_cap ?
++				(i % num_vectors) + base_vector : base_vector;
+ 			int irq = ath11k_pci_get_msi_irq(ab->dev, vector);
+ 
+ 			ab->irq_num[irq_idx] = irq;
+@@ -540,7 +727,7 @@
+ 			ath11k_dbg(ab, ATH11K_DBG_PCI,
+ 				   "irq:%d group:%d\n", irq, i);
+ 			ret = request_irq(irq, ath11k_pci_ext_interrupt_handler,
+-					  IRQF_SHARED,
++					  IRQF_SHARED | IRQF_NOBALANCING,
+ 					  "DP_EXT_IRQ", irq_grp);
+ 			if (ret) {
+ 				ath11k_err(ab, "failed request irq %d: %d\n",
+@@ -548,7 +735,11 @@
+ 				return ret;
+ 			}
+ 
+-			disable_irq_nosync(ab->irq_num[irq_idx]);
++			/* balance irq_enable */
++			if (vecs_32_cap)
++				disable_irq_nosync(ab->irq_num[irq_idx]);
++
++			ath11k_pci_set_irq_enable_flag(ab, irq_idx, 0);
+ 		}
+ 	}
+ 
+@@ -561,6 +752,7 @@
+ 	u32 msi_data_start;
+ 	u32 msi_data_count;
+ 	u32 msi_irq_start;
++	u32 vecs_32_cap;
+ 	unsigned int msi_data;
+ 	int irq, i, ret, irq_idx;
+ 
+@@ -570,9 +762,13 @@
+ 	if (ret)
+ 		return ret;
+ 
++	vecs_32_cap = ath11k_pci_priv(ab)->vectors_32_capability;
++
+ 	/* Configure CE irqs */
+ 	for (i = 0; i < ab->hw_params.ce_count; i++) {
+-		msi_data = (i % msi_data_count) + msi_irq_start;
++		msi_data = vecs_32_cap ?
++			   (i % msi_data_count) + msi_irq_start : msi_irq_start;
++
+ 		irq = ath11k_pci_get_msi_irq(ab->dev, msi_data);
+ 		ce_pipe = &ab->ce.ce_pipe[i];
+ 
+@@ -585,7 +781,7 @@
+ 			     (unsigned long)ce_pipe);
+ 
+ 		ret = request_irq(irq, ath11k_pci_ce_interrupt_handler,
+-				  IRQF_SHARED, irq_name[irq_idx],
++				  IRQF_SHARED | IRQF_NOBALANCING, irq_name[irq_idx],
+ 				  ce_pipe);
+ 		if (ret) {
+ 			ath11k_err(ab, "failed to request irq %d: %d\n",
+@@ -641,14 +837,19 @@
+ 					    msi_config.total_vectors,
+ 					    msi_config.total_vectors,
+ 					    PCI_IRQ_MSI);
+-	if (num_vectors != msi_config.total_vectors) {
+-		ath11k_err(ab, "failed to get %d MSI vectors, only %d available",
+-			   msi_config.total_vectors, num_vectors);
+-
+-		if (num_vectors >= 0)
+-			return -EINVAL;
+-		else
+-			return num_vectors;
++
++	if (num_vectors == msi_config.total_vectors) {
++		ab_pci->vectors_32_capability = 1;
++	} else {
++		ab_pci->vectors_32_capability = 0;
++		num_vectors = pci_alloc_irq_vectors(ab_pci->pdev,
++						    1,
++						    1,
++						    PCI_IRQ_MSI);
++		if (num_vectors < 0) {
++			ret = -EINVAL;
++			goto reset_msi_config;
++		}
+ 	}
+ 
+ 	msi_desc = irq_get_msi_desc(ab_pci->pdev->irq);
+@@ -658,7 +859,11 @@
+ 		goto free_msi_vector;
+ 	}
+ 
++	ath11k_info(ab, "MSI vectors: %d", num_vectors);
++
+ 	ab_pci->msi_ep_base_data = msi_desc->msg.data;
++	if (msi_desc->msi_attrib.is_64)
++		set_bit(ATH11K_PCI_FLAG_IS_MSI_64, &ab_pci->flags);
+ 
+ 	ath11k_dbg(ab, ATH11K_DBG_PCI, "msi base data is %d\n", ab_pci->msi_ep_base_data);
+ 
+@@ -667,6 +872,7 @@
+ free_msi_vector:
+ 	pci_free_irq_vectors(ab_pci->pdev);
+ 
++reset_msi_config:
+ 	return ret;
+ }
+ 
+@@ -675,6 +881,32 @@
+ 	pci_free_irq_vectors(ab_pci->pdev);
+ }
+ 
++static int ath11k_pci_config_msi_data(struct ath11k_pci *ab_pci)
++{
++	struct msi_desc *msi_desc;
++	int ret;
++
++	msi_desc = irq_get_msi_desc(ab_pci->pdev->irq);
++
++	if (!msi_desc) {
++		ath11k_err(ab_pci->ab, "msi_desc is NULL!\n");
++		ret = -EINVAL;
++		goto free_msi_vector;
++	}
++
++	ab_pci->msi_ep_base_data = msi_desc->msg.data;
++
++	ath11k_dbg(ab_pci->ab, ATH11K_DBG_PCI, "msi base data is %d\n",
++		   ab_pci->msi_ep_base_data);
++
++	return 0;
++
++ free_msi_vector:
++	pci_free_irq_vectors(ab_pci->pdev);
++
++	return ret;
++}
++
+ static int ath11k_pci_claim(struct ath11k_pci *ab_pci, struct pci_dev *pdev)
+ {
+ 	struct ath11k_base *ab = ab_pci->ab;
+@@ -764,7 +996,12 @@
+ 
+ 	ab_pci->register_window = 0;
+ 	clear_bit(ATH11K_PCI_FLAG_INIT_DONE, &ab_pci->flags);
+-	ath11k_pci_sw_reset(ab_pci->ab);
++	ath11k_pci_sw_reset(ab_pci->ab, true);
++
++	/* disable L0sL1, write 0x40 to link_ctrl */
++	pci_read_config_byte(ab_pci->pdev, 0x80, &ab_pci->aspm);
++	pci_write_config_byte(ab_pci->pdev, 0x80, ab_pci->aspm & 0xfc);
++	ab_pci->restore_aspm = true;
+ 
+ 	ret = ath11k_mhi_start(ab_pci);
+ 	if (ret) {
+@@ -779,10 +1016,44 @@
+ {
+ 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
+ 
++	/* recover aspm */
++	if (ab_pci->restore_aspm) {
++		pci_write_config_byte(ab_pci->pdev, 0x80, ab_pci->aspm);
++		ab_pci->restore_aspm = false;
++	}
++
++	ath11k_pci_force_wake(ab_pci->ab);
+ 	ath11k_mhi_stop(ab_pci);
+ 	clear_bit(ATH11K_PCI_FLAG_INIT_DONE, &ab_pci->flags);
+-	ath11k_pci_force_wake(ab_pci->ab);
+-	ath11k_pci_sw_reset(ab_pci->ab);
++	ath11k_pci_sw_reset(ab_pci->ab, false);
++}
++
++static int ath11k_pci_hif_suspend(struct ath11k_base *ab)
++{
++	struct ath11k_pci *ar_pci;
++
++	ar_pci = ath11k_pci_priv(ab);
++	ath11k_mhi_suspend(ar_pci);
++
++	return 0;
++}
++
++static int ath11k_pci_hif_resume(struct ath11k_base *ab)
++{
++	struct ath11k_pci *ar_pci;
++
++	ar_pci = ath11k_pci_priv(ab);
++	ath11k_mhi_resume(ar_pci);
++
++	return 0;
++}
++
++static void ath11k_pci_force_rddm(struct ath11k_base *ab)
++{
++	struct ath11k_pci *ar_pci;
++
++	ar_pci = ath11k_pci_priv(ab);
++	ath11k_mhi_force_rddm(ar_pci);
+ }
+ 
+ static void ath11k_pci_kill_tasklets(struct ath11k_base *ab)
+@@ -799,11 +1070,16 @@
+ 	}
+ }
+ 
+-static void ath11k_pci_stop(struct ath11k_base *ab)
++static void ath11k_pci_ce_irq_disable_sync(struct ath11k_base *ab)
+ {
+ 	ath11k_pci_ce_irqs_disable(ab);
+ 	ath11k_pci_sync_ce_irqs(ab);
+ 	ath11k_pci_kill_tasklets(ab);
++}
++
++static void ath11k_pci_stop(struct ath11k_base *ab)
++{
++	ath11k_pci_ce_irq_disable_sync(ab);
+ 	ath11k_ce_cleanup_pipes(ab);
+ }
+ 
+@@ -813,12 +1089,28 @@
+ 
+ 	set_bit(ATH11K_PCI_FLAG_INIT_DONE, &ab_pci->flags);
+ 
++	/* recover aspm */
++	if (ab_pci->restore_aspm) {
++		pci_write_config_byte(ab_pci->pdev, 0x80, ab_pci->aspm);
++		ab_pci->restore_aspm = false;
++	}
++
+ 	ath11k_pci_ce_irqs_enable(ab);
+ 	ath11k_ce_rx_post_buf(ab);
+ 
+ 	return 0;
+ }
+ 
++static void ath11k_pci_hif_ce_irq_enable(struct ath11k_base *ab)
++{
++	ath11k_pci_ce_irqs_enable(ab);
++}
++
++static void ath11k_pci_hif_ce_irq_disable(struct ath11k_base *ab)
++{
++	ath11k_pci_ce_irq_disable_sync(ab);
++}
++
+ static int ath11k_pci_map_service_to_pipe(struct ath11k_base *ab, u16 service_id,
+ 					  u8 *ul_pipe, u8 *dl_pipe)
+ {
+@@ -862,6 +1154,11 @@
+ 	return 0;
+ }
+ 
++static int ath11k_pci_is_32_vectors_support(struct ath11k_base *ab)
++{
++	return ath11k_pci_priv(ab)->vectors_32_capability;
++}
++
+ static const struct ath11k_hif_ops ath11k_pci_hif_ops = {
+ 	.start = ath11k_pci_start,
+ 	.stop = ath11k_pci_stop,
+@@ -869,11 +1166,17 @@
+ 	.write32 = ath11k_pci_write32,
+ 	.power_down = ath11k_pci_power_down,
+ 	.power_up = ath11k_pci_power_up,
++	.suspend = ath11k_pci_hif_suspend,
++	.resume = ath11k_pci_hif_resume,
++	.target_crash = ath11k_pci_force_rddm,
+ 	.irq_enable = ath11k_pci_ext_irq_enable,
+ 	.irq_disable = ath11k_pci_ext_irq_disable,
+ 	.get_msi_address =  ath11k_pci_get_msi_address,
+ 	.get_user_msi_vector = ath11k_get_user_msi_assignment,
+ 	.map_service_to_pipe = ath11k_pci_map_service_to_pipe,
++	.is_32_vecs_support = ath11k_pci_is_32_vectors_support,
++	.ce_irq_enable = ath11k_pci_hif_ce_irq_enable,
++	.ce_irq_disable = ath11k_pci_hif_ce_irq_disable,
+ };
+ 
+ static int ath11k_pci_probe(struct pci_dev *pdev,
+@@ -972,6 +1275,13 @@
+ 		goto err_ce_free;
+ 	}
+ 
++	/* Get the correct msi_data after request_irq() to avoid spurious interrupt */
++	ret = ath11k_pci_config_msi_data(ab_pci);
++	if (ret) {
++		ath11k_err(ab, "failed to config msi_data: %d\n", ret);
++		goto err_ce_free;
++	}
++
+ 	ret = ath11k_core_init(ab);
+ 	if (ret) {
+ 		ath11k_err(ab, "failed to init core: %d\n", ret);
+@@ -1030,12 +1340,43 @@
+ 	ath11k_pci_power_down(ab);
+ }
+ 
++static __maybe_unused int ath11k_pci_pm_suspend(struct device *dev)
++{
++	struct ath11k_base *ab = dev_get_drvdata(dev);
++	int ret;
++
++	ret = ath11k_core_suspend(ab);
++	if (ret)
++		ath11k_warn(ab, "failed to suspend hif: %d\n", ret);
++
++	return ret;
++}
++
++static __maybe_unused int ath11k_pci_pm_resume(struct device *dev)
++{
++	struct ath11k_base *ab = dev_get_drvdata(dev);
++	int ret;
++
++	ret = ath11k_core_resume(ab);
++	if (ret)
++		ath11k_warn(ab, "failed to resume hif: %d\n", ret);
++
++	return ret;
++}
++
++static SIMPLE_DEV_PM_OPS(ath11k_pci_pm_ops,
++			 ath11k_pci_pm_suspend,
++			 ath11k_pci_pm_resume);
++
+ static struct pci_driver ath11k_pci_driver = {
+ 	.name = "ath11k_pci",
+ 	.id_table = ath11k_pci_id_table,
+ 	.probe = ath11k_pci_probe,
+ 	.remove = ath11k_pci_remove,
+ 	.shutdown = ath11k_pci_shutdown,
++#ifdef CONFIG_PM
++	.driver.pm = &ath11k_pci_pm_ops,
++#endif
+ };
+ 
+ static int ath11k_pci_init(void)
+diff -urN a/drivers/net/wireless/ath/ath11k/pci.h b/drivers/net/wireless/ath/ath11k/pci.h
+--- a/drivers/net/wireless/ath/ath11k/pci.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/pci.h	2021-01-22 16:45:48.031276835 +0900
+@@ -24,6 +24,31 @@
+ /* register used for handshake mechanism to validate UMAC is awake */
+ #define PCIE_SOC_WAKE_PCIE_LOCAL_REG		0x3004
+ 
++#define PCIE_PCIE_PARF_LTSSM              0X1E081B0
++#define PARM_LTSSM_VALUE                  0x111
++
++#define GCC_GCC_PCIE_HOT_RST              0X1E402BC
++#define GCC_GCC_PCIE_HOT_RST_VAL          0x10
++
++#define PCIE_PCIE_INT_ALL_CLEAR           0X1E08228
++#define PCIE_SMLH_REQ_RST_LINK_DOWN       0x2
++#define PCIE_INT_CLEAR_ALL                0xFFFFFFFF
++
++#define WLAON_QFPROM_PWR_CTRL_REG         0x01F8031C
++#define QFPROM_PWR_CTRL_VDD4BLOW_MASK     0x4
++#define QFPROM_PWR_CTRL_SHUTDOWN_MASK     0x1
++
++#define PCIE_QSERDES_COM_SYSCLK_EN_SEL_REG      0x01E0C0AC
++#define PCIE_QSERDES_COM_SYSCLK_EN_SEL_VAL      0x10
++#define PCIE_QSERDES_COM_SYSCLK_EN_SEL_MSK      0xFFFFFFFF
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG1_REG 0x01E0C628
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG1_VAL 0x02
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG2_REG 0x01E0C62C
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG2_VAL 0x52
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG4_REG 0x01E0C634
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG4_VAL 0xFF
++#define PCIE_USB3_PCS_MISC_OSC_DTCT_CONFIG_MSK  0x000000FF
++
+ struct ath11k_msi_user {
+ 	char *name;
+ 	int num_vectors;
+@@ -38,6 +63,7 @@
+ 
+ enum ath11k_pci_flags {
+ 	ATH11K_PCI_FLAG_INIT_DONE,
++	ATH11K_PCI_FLAG_IS_MSI_64,
+ };
+ 
+ struct ath11k_pci {
+@@ -46,6 +72,7 @@
+ 	u16 dev_id;
+ 	char amss_path[100];
+ 	u32 msi_ep_base_data;
++	u32 vectors_32_capability;
+ 	struct mhi_controller *mhi_ctrl;
+ 	unsigned long mhi_state;
+ 	u32 register_window;
+@@ -55,6 +82,8 @@
+ 
+ 	/* enum ath11k_pci_flags */
+ 	unsigned long flags;
++	u8 aspm;
++	bool restore_aspm;
+ };
+ 
+ static inline struct ath11k_pci *ath11k_pci_priv(struct ath11k_base *ab)
+diff -urN a/drivers/net/wireless/ath/ath11k/peer.c b/drivers/net/wireless/ath/ath11k/peer.c
+--- a/drivers/net/wireless/ath/ath11k/peer.c	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/peer.c	2021-01-22 16:45:48.031276835 +0900
+@@ -76,6 +76,23 @@
+ 	return NULL;
+ }
+ 
++struct ath11k_peer *ath11k_peer_find_by_vdev_id(struct ath11k_base *ab,
++						int vdev_id)
++{
++	struct ath11k_peer *peer;
++
++	spin_lock_bh(&ab->base_lock);
++
++	list_for_each_entry(peer, &ab->peers, list) {
++		if (vdev_id == peer->vdev_id) {
++			spin_unlock_bh(&ab->base_lock);
++			return peer;
++		}
++	}
++	spin_unlock_bh(&ab->base_lock);
++	return NULL;
++}
++
+ void ath11k_peer_unmap_event(struct ath11k_base *ab, u16 peer_id)
+ {
+ 	struct ath11k_peer *peer;
+@@ -177,12 +194,36 @@
+ 	return ath11k_wait_for_peer_common(ar->ab, vdev_id, addr, false);
+ }
+ 
++int ath11k_wait_for_peer_delete_done(struct ath11k *ar, u32 vdev_id,
++				     const u8 *addr)
++{
++	int ret;
++	unsigned long time_left;
++
++	ret = ath11k_wait_for_peer_deleted(ar, vdev_id, addr);
++	if (ret) {
++		ath11k_warn(ar->ab, "failed wait for peer deleted");
++		return ret;
++	}
++
++	time_left = wait_for_completion_timeout(&ar->peer_delete_done,
++						3 * HZ);
++	if (time_left == 0) {
++		ath11k_warn(ar->ab, "Timeout in receiving peer delete response\n");
++		return -ETIMEDOUT;
++	}
++
++	return 0;
++}
++
+ int ath11k_peer_delete(struct ath11k *ar, u32 vdev_id, u8 *addr)
+ {
+ 	int ret;
+ 
+ 	lockdep_assert_held(&ar->conf_mutex);
+ 
++	reinit_completion(&ar->peer_delete_done);
++
+ 	ret = ath11k_wmi_send_peer_delete_cmd(ar, addr, vdev_id);
+ 	if (ret) {
+ 		ath11k_warn(ar->ab,
+@@ -191,7 +232,7 @@
+ 		return ret;
+ 	}
+ 
+-	ret = ath11k_wait_for_peer_deleted(ar, vdev_id, addr);
++	ret = ath11k_wait_for_peer_delete_done(ar, vdev_id, addr);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -247,8 +288,22 @@
+ 		spin_unlock_bh(&ar->ab->base_lock);
+ 		ath11k_warn(ar->ab, "failed to find peer %pM on vdev %i after creation\n",
+ 			    param->peer_addr, param->vdev_id);
+-		ath11k_wmi_send_peer_delete_cmd(ar, param->peer_addr,
+-						param->vdev_id);
++
++		reinit_completion(&ar->peer_delete_done);
++
++		ret = ath11k_wmi_send_peer_delete_cmd(ar, param->peer_addr,
++						      param->vdev_id);
++		if (ret) {
++			ath11k_warn(ar->ab, "failed to delete peer vdev_id %d addr %pM\n",
++				    param->vdev_id, param->peer_addr);
++			return ret;
++		}
++
++		ret = ath11k_wait_for_peer_delete_done(ar, param->vdev_id,
++						       param->peer_addr);
++		if (ret)
++			return ret;
++
+ 		return -ENOENT;
+ 	}
+ 
+diff -urN a/drivers/net/wireless/ath/ath11k/peer.h b/drivers/net/wireless/ath/ath11k/peer.h
+--- a/drivers/net/wireless/ath/ath11k/peer.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/peer.h	2021-01-22 16:45:48.031276835 +0900
+@@ -41,5 +41,9 @@
+ int ath11k_peer_delete(struct ath11k *ar, u32 vdev_id, u8 *addr);
+ int ath11k_peer_create(struct ath11k *ar, struct ath11k_vif *arvif,
+ 		       struct ieee80211_sta *sta, struct peer_create_params *param);
++int ath11k_wait_for_peer_delete_done(struct ath11k *ar, u32 vdev_id,
++				     const u8 *addr);
++struct ath11k_peer *ath11k_peer_find_by_vdev_id(struct ath11k_base *ab,
++						int vdev_id);
+ 
+ #endif /* _PEER_H_ */
+diff -urN a/drivers/net/wireless/ath/ath11k/qmi.c b/drivers/net/wireless/ath/ath11k/qmi.c
+--- a/drivers/net/wireless/ath/ath11k/qmi.c	2021-01-22 16:45:27.517545816 +0900
++++ b/drivers/net/wireless/ath/ath11k/qmi.c	2021-01-22 16:45:48.034610234 +0900
+@@ -1680,6 +1680,10 @@
+ 			req->mem_seg[i].addr = ab->qmi.target_mem[i].paddr;
+ 			req->mem_seg[i].size = ab->qmi.target_mem[i].size;
+ 			req->mem_seg[i].type = ab->qmi.target_mem[i].type;
++			ath11k_info(ab, "qmi req mem_seg[%d] 0x%llx %u %u\n", i,
++				    ab->qmi.target_mem[i].paddr,
++				    ab->qmi.target_mem[i].size,
++				    ab->qmi.target_mem[i].type);
+ 		}
+ 	}
+ 
+@@ -1747,6 +1751,7 @@
+ 
+ 	ab->qmi.target_mem_delayed = false;
+ 
++	ab->qmi.target_mem_delayed = false;
+ 	for (i = 0; i < ab->qmi.mem_seg_count; i++) {
+ 		chunk = &ab->qmi.target_mem[i];
+ 		chunk->vaddr = dma_alloc_coherent(ab->dev,
+diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath11k/wmi.c
+--- a/drivers/net/wireless/ath/ath11k/wmi.c	2021-01-22 16:45:27.520879214 +0900
++++ b/drivers/net/wireless/ath/ath11k/wmi.c	2021-01-22 16:45:48.034610234 +0900
+@@ -122,6 +122,8 @@
+ 		= { .min_len = sizeof(struct wmi_stats_event) },
+ 	[WMI_TAG_PDEV_CTL_FAILSAFE_CHECK_EVENT]
+ 		= { .min_len = sizeof(struct wmi_pdev_ctl_failsafe_chk_event) },
++	[WMI_TAG_VDEV_DELETE_RESP_EVENT] = {
++		.min_len = sizeof(struct wmi_vdev_delete_resp_event) },
+ };
+ 
+ #define PRIMAP(_hw_mode_) \
+@@ -3302,6 +3304,34 @@
+ 	return 0;
+ }
+ 
++int ath11k_wmi_set_hw_mode(struct ath11k_base *ab, int hw_mode_index)
++{
++	struct wmi_pdev_set_hw_mode_cmd_param *cmd;
++	struct sk_buff *skb;
++	struct ath11k_wmi_base *wmi_ab = &ab->wmi_ab;
++	int len;
++	int ret;
++
++	len = sizeof(*cmd);
++
++	skb = ath11k_wmi_alloc_skb(wmi_ab, len);
++	cmd = (struct wmi_pdev_set_hw_mode_cmd_param *)skb->data;
++
++	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_PDEV_SET_HW_MODE_CMD) |
++			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
++
++	cmd->pdev_id = WMI_PDEV_ID_SOC;
++	cmd->hw_mode_index = hw_mode_index;
++
++	ret = ath11k_wmi_cmd_send(&wmi_ab->wmi[0], skb, WMI_PDEV_SET_HW_MODE_CMDID);
++	if (ret) {
++		ath11k_warn(ab, "failed to send WMI_PDEV_SET_HW_MODE_CMDID\n");
++		dev_kfree_skb(skb);
++	}
++
++	return ret;
++}
++
+ int ath11k_wmi_cmd_init(struct ath11k_base *ab)
+ {
+ 	struct ath11k_wmi_base *wmi_sc = &ab->wmi_ab;
+@@ -3320,13 +3350,12 @@
+ 	init_param.hw_mode_id = wmi_sc->preferred_hw_mode;
+ 	init_param.mem_chunks = wmi_sc->mem_chunks;
+ 
+-	if (wmi_sc->preferred_hw_mode == WMI_HOST_HW_MODE_SINGLE)
++	if (wmi_sc->preferred_hw_mode == WMI_HOST_HW_MODE_SINGLE ||
++	    ab->hw_params.single_pdev_only)
+ 		init_param.hw_mode_id = WMI_HOST_HW_MODE_MAX;
+ 
+-	if (ab->hw_params.needs_band_to_mac) {
+-		init_param.num_band_to_mac = ab->num_radios;
+-		ath11k_fill_band_to_mac_param(ab, init_param.band_to_mac);
+-	}
++	init_param.num_band_to_mac = ab->num_radios;
++	ath11k_fill_band_to_mac_param(ab, init_param.band_to_mac);
+ 
+ 	return ath11k_init_cmd_send(&wmi_sc->wmi[0], &init_param);
+ }
+@@ -4211,6 +4240,34 @@
+ 	return 0;
+ }
+ 
++static int ath11k_pull_vdev_del_resp_ev(struct ath11k_base *ab,
++					struct sk_buff *skb,
++					u32 *vdev_id)
++{
++	const void **tb;
++	const struct wmi_vdev_delete_resp_event *ev;
++	int ret;
++
++	tb = ath11k_wmi_tlv_parse_alloc(ab, skb->data, skb->len, GFP_ATOMIC);
++	if (IS_ERR(tb)) {
++		ret = PTR_ERR(tb);
++		ath11k_warn(ab, "failed to parse tlv: %d\n", ret);
++		return ret;
++	}
++
++	ev = tb[WMI_TAG_VDEV_DELETE_RESP_EVENT];
++	if (!ev) {
++		ath11k_warn(ab, "failed to fetch vdev delete resp ev");
++		kfree(tb);
++		return -EPROTO;
++	}
++
++	*vdev_id = ev->vdev_id;
++
++	kfree(tb);
++	return 0;
++}
++
+ static int ath11k_pull_bcn_tx_status_ev(struct ath11k_base *ab, void *evt_buf,
+ 					u32 len, u32 *vdev_id,
+ 					u32 *tx_status)
+@@ -5532,15 +5589,54 @@
+ static void ath11k_peer_delete_resp_event(struct ath11k_base *ab, struct sk_buff *skb)
+ {
+ 	struct wmi_peer_delete_resp_event peer_del_resp;
++	struct ath11k *ar;
+ 
+ 	if (ath11k_pull_peer_del_resp_ev(ab, skb, &peer_del_resp) != 0) {
+ 		ath11k_warn(ab, "failed to extract peer delete resp");
+ 		return;
+ 	}
+ 
+-	/* TODO: Do we need to validate whether ath11k_peer_find() return NULL
+-	 *	 Why this is needed when there is HTT event for peer delete
+-	 */
++	rcu_read_lock();
++	ar = ath11k_mac_get_ar_by_vdev_id(ab, peer_del_resp.vdev_id);
++	if (!ar) {
++		ath11k_warn(ab, "invalid vdev id in peer delete resp ev %d",
++			    peer_del_resp.vdev_id);
++		rcu_read_unlock();
++		return;
++	}
++
++	complete(&ar->peer_delete_done);
++	rcu_read_unlock();
++	ath11k_dbg(ab, ATH11K_DBG_WMI, "peer delete resp for vdev id %d addr %pM\n",
++		   peer_del_resp.vdev_id, peer_del_resp.peer_macaddr.addr);
++}
++
++static void ath11k_vdev_delete_resp_event(struct ath11k_base *ab,
++					  struct sk_buff *skb)
++{
++	struct ath11k *ar;
++	u32 vdev_id = 0;
++
++	if (ath11k_pull_vdev_del_resp_ev(ab, skb, &vdev_id) != 0) {
++		ath11k_warn(ab, "failed to extract vdev delete resp");
++		return;
++	}
++
++	rcu_read_lock();
++	ar = ath11k_mac_get_ar_by_vdev_id(ab, vdev_id);
++	if (!ar) {
++		ath11k_warn(ab, "invalid vdev id in vdev delete resp ev %d",
++			    vdev_id);
++		rcu_read_unlock();
++		return;
++	}
++
++	complete(&ar->vdev_delete_done);
++
++	rcu_read_unlock();
++
++	ath11k_dbg(ab, ATH11K_DBG_WMI, "vdev delete resp for vdev id %d\n",
++		   vdev_id);
+ }
+ 
+ static inline const char *ath11k_wmi_vdev_resp_print(u32 vdev_resp_status)
+@@ -6398,6 +6494,58 @@
+ 	ath11k_thermal_event_temperature(ar, ev.temp);
+ }
+ 
++static int ath11k_wow_wakeup_host_parse(struct ath11k_base *ab,
++					u16 tag, u16 len,
++					    const void *ptr, void *data)
++{
++	struct wmi_wow_ev_arg *ev = data;
++	const char *wow_pg_fault;
++	int wow_pg_len;
++
++	switch (tag) {
++	case WMI_TAG_WOW_EVENT_INFO:
++		memcpy(ev, ptr, sizeof(*ev));
++		ath11k_dbg(ab, ATH11K_DBG_WMI, "wow wakeup host reason %d %s\n",
++			   ev->wake_reason, wow_reason(ev->wake_reason));
++		break;
++
++	case WMI_TAG_ARRAY_BYTE:
++		if (ev && ev->wake_reason == WOW_REASON_PAGE_FAULT) {
++			wow_pg_fault = ptr;
++			/* the first 4 bytes are length */
++			wow_pg_len = *(int *)wow_pg_fault;
++			wow_pg_fault += sizeof(int);
++			ath11k_dbg(ab, ATH11K_DBG_WMI, "wow data_len = %d\n",
++				   wow_pg_len);
++			ath11k_dbg_dump(ab, ATH11K_DBG_WMI,
++					"wow_event_info_type packet present",
++					"wow_pg_fault ",
++					wow_pg_fault,
++					wow_pg_len);
++		}
++		break;
++	default:
++		break;
++	}
++
++	return 0;
++}
++
++static void
++ath11k_wmi_event_wow_wakeup_host(struct ath11k_base *ab, struct sk_buff *skb)
++{
++	struct wmi_wow_ev_arg ev = { };
++	int ret;
++
++	ret = ath11k_wmi_tlv_iter(ab, skb->data, skb->len,
++				  ath11k_wow_wakeup_host_parse,
++				  &ev);
++	if (ret)
++		ath11k_warn(ab, "failed to parse tlv %d\n", ret);
++
++	complete(&ab->pdevs[0].ar->wow.wakeup_completed);
++}
++
+ static void ath11k_wmi_tlv_op_rx(struct ath11k_base *ab, struct sk_buff *skb)
+ {
+ 	struct wmi_cmd_hdr *cmd_hdr;
+@@ -6486,7 +6634,6 @@
+ 		break;
+ 	/* add Unsupported events here */
+ 	case WMI_TBTTOFFSET_EXT_UPDATE_EVENTID:
+-	case WMI_VDEV_DELETE_RESP_EVENTID:
+ 	case WMI_PEER_OPER_MODE_CHANGE_EVENTID:
+ 	case WMI_TWT_ENABLE_EVENTID:
+ 	case WMI_TWT_DISABLE_EVENTID:
+@@ -6497,6 +6644,12 @@
+ 	case WMI_PDEV_DFS_RADAR_DETECTION_EVENTID:
+ 		ath11k_wmi_pdev_dfs_radar_detected_event(ab, skb);
+ 		break;
++	case WMI_WOW_WAKEUP_HOST_EVENTID:
++		ath11k_wmi_event_wow_wakeup_host(ab, skb);
++		break;
++	case WMI_VDEV_DELETE_RESP_EVENTID:
++		ath11k_vdev_delete_resp_event(ab, skb);
++		break;
+ 	/* TODO: Add remaining events */
+ 	default:
+ 		ath11k_dbg(ab, ATH11K_DBG_WMI, "Unknown eventid: 0x%x\n", id);
+@@ -6711,3 +6864,46 @@
+ 
+ 	ath11k_wmi_free_dbring_caps(ab);
+ }
++
++int ath11k_wmi_wow_host_wakeup_ind(struct ath11k *ar)
++{
++	struct wmi_wow_host_wakeup_ind *cmd;
++	struct sk_buff *skb;
++	size_t len;
++
++	len = sizeof(*cmd);
++	skb = ath11k_wmi_alloc_skb(ar->wmi->wmi_ab, len);
++	if (!skb)
++		return -ENOMEM;
++
++	cmd = (struct wmi_wow_host_wakeup_ind *)skb->data;
++	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG,
++				     WMI_TAG_WOW_HOSTWAKEUP_FROM_SLEEP_CMD) |
++			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
++
++	ath11k_dbg(ar->ab, ATH11K_DBG_WMI, "wmi tlv wow host wakeup ind\n");
++
++	return ath11k_wmi_cmd_send(ar->wmi, skb, WMI_WOW_HOSTWAKEUP_FROM_SLEEP_CMDID);
++}
++
++int ath11k_wmi_wow_enable(struct ath11k *ar)
++{
++	struct wmi_wow_enable_cmd *cmd;
++	struct sk_buff *skb;
++	int len;
++
++	len = sizeof(*cmd);
++	skb = ath11k_wmi_alloc_skb(ar->wmi->wmi_ab, len);
++	if (!skb)
++		return -ENOMEM;
++
++	cmd = (struct wmi_wow_enable_cmd *)skb->data;
++	cmd->tlv_header = FIELD_PREP(WMI_TLV_TAG, WMI_TAG_WOW_ENABLE_CMD) |
++			  FIELD_PREP(WMI_TLV_LEN, sizeof(*cmd) - TLV_HDR_SIZE);
++
++	cmd->enable = 1;
++	cmd->pause_iface_config = WOW_IFACE_PAUSE_ENABLED;
++	ath11k_dbg(ar->ab, ATH11K_DBG_WMI, "wmi tlv wow enable\n");
++
++	return ath11k_wmi_cmd_send(ar->wmi, skb, WMI_WOW_ENABLE_CMDID);
++}
+diff -urN a/drivers/net/wireless/ath/ath11k/wmi.h b/drivers/net/wireless/ath/ath11k/wmi.h
+--- a/drivers/net/wireless/ath/ath11k/wmi.h	2020-12-14 07:41:30.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/wmi.h	2021-01-22 16:45:48.037943633 +0900
+@@ -4013,6 +4013,10 @@
+ 	u32  flag_info;
+ };
+ 
++struct wmi_vdev_delete_resp_event {
++	u32 vdev_id;
++} __packed;
++
+ struct wmi_peer_delete_resp_event {
+ 	u32 vdev_id;
+ 	struct wmi_mac_addr peer_macaddr;
+@@ -5000,6 +5004,169 @@
+ 	struct ath11k_targ_cap *targ_cap;
+ };
+ 
++/* WOW structures */
++enum wmi_wow_wakeup_event {
++	WOW_BMISS_EVENT = 0,
++	WOW_BETTER_AP_EVENT,
++	WOW_DEAUTH_RECVD_EVENT,
++	WOW_MAGIC_PKT_RECVD_EVENT,
++	WOW_GTK_ERR_EVENT,
++	WOW_FOURWAY_HSHAKE_EVENT,
++	WOW_EAPOL_RECVD_EVENT,
++	WOW_NLO_DETECTED_EVENT,
++	WOW_DISASSOC_RECVD_EVENT,
++	WOW_PATTERN_MATCH_EVENT,
++	WOW_CSA_IE_EVENT,
++	WOW_PROBE_REQ_WPS_IE_EVENT,
++	WOW_AUTH_REQ_EVENT,
++	WOW_ASSOC_REQ_EVENT,
++	WOW_HTT_EVENT,
++	WOW_RA_MATCH_EVENT,
++	WOW_HOST_AUTO_SHUTDOWN_EVENT,
++	WOW_IOAC_MAGIC_EVENT,
++	WOW_IOAC_SHORT_EVENT,
++	WOW_IOAC_EXTEND_EVENT,
++	WOW_IOAC_TIMER_EVENT,
++	WOW_DFS_PHYERR_RADAR_EVENT,
++	WOW_BEACON_EVENT,
++	WOW_CLIENT_KICKOUT_EVENT,
++	WOW_EVENT_MAX,
++};
++
++enum wmi_wow_interface_cfg {
++	WOW_IFACE_PAUSE_ENABLED,
++	WOW_IFACE_PAUSE_DISABLED
++};
++
++#define C2S(x) case x: return #x
++
++static inline const char *wow_wakeup_event(enum wmi_wow_wakeup_event ev)
++{
++	switch (ev) {
++	C2S(WOW_BMISS_EVENT);
++	C2S(WOW_BETTER_AP_EVENT);
++	C2S(WOW_DEAUTH_RECVD_EVENT);
++	C2S(WOW_MAGIC_PKT_RECVD_EVENT);
++	C2S(WOW_GTK_ERR_EVENT);
++	C2S(WOW_FOURWAY_HSHAKE_EVENT);
++	C2S(WOW_EAPOL_RECVD_EVENT);
++	C2S(WOW_NLO_DETECTED_EVENT);
++	C2S(WOW_DISASSOC_RECVD_EVENT);
++	C2S(WOW_PATTERN_MATCH_EVENT);
++	C2S(WOW_CSA_IE_EVENT);
++	C2S(WOW_PROBE_REQ_WPS_IE_EVENT);
++	C2S(WOW_AUTH_REQ_EVENT);
++	C2S(WOW_ASSOC_REQ_EVENT);
++	C2S(WOW_HTT_EVENT);
++	C2S(WOW_RA_MATCH_EVENT);
++	C2S(WOW_HOST_AUTO_SHUTDOWN_EVENT);
++	C2S(WOW_IOAC_MAGIC_EVENT);
++	C2S(WOW_IOAC_SHORT_EVENT);
++	C2S(WOW_IOAC_EXTEND_EVENT);
++	C2S(WOW_IOAC_TIMER_EVENT);
++	C2S(WOW_DFS_PHYERR_RADAR_EVENT);
++	C2S(WOW_BEACON_EVENT);
++	C2S(WOW_CLIENT_KICKOUT_EVENT);
++	C2S(WOW_EVENT_MAX);
++	default:
++		return NULL;
++	}
++}
++
++enum wmi_wow_wake_reason {
++	WOW_REASON_UNSPECIFIED = -1,
++	WOW_REASON_NLOD = 0,
++	WOW_REASON_AP_ASSOC_LOST,
++	WOW_REASON_LOW_RSSI,
++	WOW_REASON_DEAUTH_RECVD,
++	WOW_REASON_DISASSOC_RECVD,
++	WOW_REASON_GTK_HS_ERR,
++	WOW_REASON_EAP_REQ,
++	WOW_REASON_FOURWAY_HS_RECV,
++	WOW_REASON_TIMER_INTR_RECV,
++	WOW_REASON_PATTERN_MATCH_FOUND,
++	WOW_REASON_RECV_MAGIC_PATTERN,
++	WOW_REASON_P2P_DISC,
++	WOW_REASON_WLAN_HB,
++	WOW_REASON_CSA_EVENT,
++	WOW_REASON_PROBE_REQ_WPS_IE_RECV,
++	WOW_REASON_AUTH_REQ_RECV,
++	WOW_REASON_ASSOC_REQ_RECV,
++	WOW_REASON_HTT_EVENT,
++	WOW_REASON_RA_MATCH,
++	WOW_REASON_HOST_AUTO_SHUTDOWN,
++	WOW_REASON_IOAC_MAGIC_EVENT,
++	WOW_REASON_IOAC_SHORT_EVENT,
++	WOW_REASON_IOAC_EXTEND_EVENT,
++	WOW_REASON_IOAC_TIMER_EVENT,
++	WOW_REASON_ROAM_HO,
++	WOW_REASON_DFS_PHYERR_RADADR_EVENT,
++	WOW_REASON_BEACON_RECV,
++	WOW_REASON_CLIENT_KICKOUT_EVENT,
++	WOW_REASON_PAGE_FAULT = 0x3a,
++	WOW_REASON_DEBUG_TEST = 0xFF,
++};
++
++static inline const char *wow_reason(enum wmi_wow_wake_reason reason)
++{
++	switch (reason) {
++	C2S(WOW_REASON_UNSPECIFIED);
++	C2S(WOW_REASON_NLOD);
++	C2S(WOW_REASON_AP_ASSOC_LOST);
++	C2S(WOW_REASON_LOW_RSSI);
++	C2S(WOW_REASON_DEAUTH_RECVD);
++	C2S(WOW_REASON_DISASSOC_RECVD);
++	C2S(WOW_REASON_GTK_HS_ERR);
++	C2S(WOW_REASON_EAP_REQ);
++	C2S(WOW_REASON_FOURWAY_HS_RECV);
++	C2S(WOW_REASON_TIMER_INTR_RECV);
++	C2S(WOW_REASON_PATTERN_MATCH_FOUND);
++	C2S(WOW_REASON_RECV_MAGIC_PATTERN);
++	C2S(WOW_REASON_P2P_DISC);
++	C2S(WOW_REASON_WLAN_HB);
++	C2S(WOW_REASON_CSA_EVENT);
++	C2S(WOW_REASON_PROBE_REQ_WPS_IE_RECV);
++	C2S(WOW_REASON_AUTH_REQ_RECV);
++	C2S(WOW_REASON_ASSOC_REQ_RECV);
++	C2S(WOW_REASON_HTT_EVENT);
++	C2S(WOW_REASON_RA_MATCH);
++	C2S(WOW_REASON_HOST_AUTO_SHUTDOWN);
++	C2S(WOW_REASON_IOAC_MAGIC_EVENT);
++	C2S(WOW_REASON_IOAC_SHORT_EVENT);
++	C2S(WOW_REASON_IOAC_EXTEND_EVENT);
++	C2S(WOW_REASON_IOAC_TIMER_EVENT);
++	C2S(WOW_REASON_ROAM_HO);
++	C2S(WOW_REASON_DFS_PHYERR_RADADR_EVENT);
++	C2S(WOW_REASON_BEACON_RECV);
++	C2S(WOW_REASON_CLIENT_KICKOUT_EVENT);
++	C2S(WOW_REASON_PAGE_FAULT);
++	C2S(WOW_REASON_DEBUG_TEST);
++	default:
++		return NULL;
++	}
++}
++
++#undef C2S
++
++struct wmi_wow_enable_cmd {
++	u32 tlv_header;
++	u32 enable;
++	u32 pause_iface_config;
++	u32 flags;
++}  __packed;
++
++struct wmi_wow_host_wakeup_ind {
++	u32 tlv_header;
++	u32 reserved;
++} __packed;
++
++struct wmi_wow_ev_arg {
++	u32 vdev_id;
++	u32 flag;
++	enum wmi_wow_wake_reason wake_reason;
++	u32 data_len;
++};
++
+ int ath11k_wmi_cmd_send(struct ath11k_pdev_wmi *wmi, struct sk_buff *skb,
+ 			u32 cmd_id);
+ struct sk_buff *ath11k_wmi_alloc_skb(struct ath11k_wmi_base *wmi_sc, u32 len);
+@@ -5121,4 +5288,7 @@
+ 				    u32 trigger, u32 enable);
+ int ath11k_wmi_vdev_spectral_conf(struct ath11k *ar,
+ 				  struct ath11k_wmi_vdev_spectral_conf_param *param);
++int ath11k_wmi_set_hw_mode(struct ath11k_base *ab, int hw_mode_index);
++int ath11k_wmi_wow_host_wakeup_ind(struct ath11k *ar);
++int ath11k_wmi_wow_enable(struct ath11k *ar);
+ #endif
+diff -urN a/drivers/net/wireless/ath/ath11k/wow.c b/drivers/net/wireless/ath/ath11k/wow.c
+--- a/drivers/net/wireless/ath/ath11k/wow.c	1970-01-01 09:00:00.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/wow.c	2021-01-22 16:45:48.037943633 +0900
+@@ -0,0 +1,70 @@
++// SPDX-License-Identifier: BSD-3-Clause-Clear
++/*
++ * Copyright (c) 2020 The Linux Foundation. All rights reserved.
++ */
++
++#include <linux/delay.h>
++
++#include "mac.h"
++#include "core.h"
++#include "hif.h"
++#include "debug.h"
++#include "wmi.h"
++#include "wow.h"
++
++int ath11k_wow_enable(struct ath11k *ar)
++{
++	int i, ret;
++
++	ar->target_suspend_ack = false;
++
++	for (i = 0; i < ATH11K_WOW_RETRY_NUM; i++) {
++		reinit_completion(&ar->target_suspend);
++		ret = ath11k_wmi_wow_enable(ar);
++		if (ret) {
++			ath11k_warn(ar->ab, "failed to issue wow enable: %d\n", ret);
++			return ret;
++		}
++
++		ret = wait_for_completion_timeout(&ar->target_suspend, 3 * HZ);
++		if (ret == 0) {
++			ath11k_warn(ar->ab,
++				    "timed out while waiting for suspend completion\n");
++			return -ETIMEDOUT;
++		} else {
++			/* If suspend_nack is received, host will send
++			 * wow_enable again after ATH11K_WOW_RETRY_WAIT_MS.
++			 */
++			if (!ar->target_suspend_ack) {
++				ath11k_warn(ar->ab, "wow enbale get nack %d\n", i);
++				msleep(ATH11K_WOW_RETRY_WAIT_MS);
++				continue;
++			}
++			break;
++		}
++	}
++
++	return 0;
++}
++
++int ath11k_wow_wakeup(struct ath11k *ar)
++{
++	int ret;
++
++	reinit_completion(&ar->wow.wakeup_completed);
++
++	ret = ath11k_wmi_wow_host_wakeup_ind(ar);
++	if (ret) {
++		ath11k_warn(ar->ab, "failed to send wow wakeup indication: %d\n",
++			    ret);
++		return ret;
++	}
++
++	ret = wait_for_completion_timeout(&ar->wow.wakeup_completed, 3 * HZ);
++	if (ret == 0) {
++			ath11k_warn(ar->ab, "timed out while waiting for wow wakeup completion\n");
++			return -ETIMEDOUT;
++	}
++
++	return 0;
++}
+diff -urN a/drivers/net/wireless/ath/ath11k/wow.h b/drivers/net/wireless/ath/ath11k/wow.h
+--- a/drivers/net/wireless/ath/ath11k/wow.h	1970-01-01 09:00:00.000000000 +0900
++++ b/drivers/net/wireless/ath/ath11k/wow.h	2021-01-22 16:45:48.037943633 +0900
+@@ -0,0 +1,10 @@
++// SPDX-License-Identifier: BSD-3-Clause-Clear
++/*
++ * Copyright (c) 2020 The Linux Foundation. All rights reserved.
++ */
++
++#define ATH11K_WOW_RETRY_NUM		3
++#define ATH11K_WOW_RETRY_WAIT_MS	200
++
++int ath11k_wow_enable(struct ath11k *ar);
++int ath11k_wow_wakeup(struct ath11k *ar);
+diff -urN a/mm/page_alloc.c b/mm/page_alloc.c
+--- a/mm/page_alloc.c	2021-01-22 16:45:27.574213564 +0900
++++ b/mm/page_alloc.c	2021-01-22 16:45:48.041277032 +0900
+@@ -275,8 +275,7 @@
+ unsigned int pageblock_order __read_mostly;
+ #endif
+ 
+-static void __free_pages_ok(struct page *page, unsigned int order,
+-			    fpi_t fpi_flags);
++static void __free_pages_ok(struct page *page, unsigned int order);
+ 
+ /*
+  * results with 256, 32 in the lowmem_reserve sysctl:
+@@ -690,7 +689,7 @@
+ void free_compound_page(struct page *page)
+ {
+ 	mem_cgroup_uncharge(page);
+-	__free_pages_ok(page, compound_order(page), FPI_NONE);
++	__free_pages_ok(page, compound_order(page));
+ }
+ 
+ void prep_compound_page(struct page *page, unsigned int order)
+@@ -1426,14 +1425,14 @@
+ static void free_one_page(struct zone *zone,
+ 				struct page *page, unsigned long pfn,
+ 				unsigned int order,
+-				int migratetype, fpi_t fpi_flags)
++				int migratetype)
+ {
+ 	spin_lock(&zone->lock);
+ 	if (unlikely(has_isolate_pageblock(zone) ||
+ 		is_migrate_isolate(migratetype))) {
+ 		migratetype = get_pfnblock_migratetype(page, pfn);
+ 	}
+-	__free_one_page(page, pfn, zone, order, migratetype, fpi_flags);
++	__free_one_page(page, pfn, zone, order, migratetype, FPI_NONE);
+ 	spin_unlock(&zone->lock);
+ }
+ 
+@@ -1511,8 +1510,7 @@
+ 	}
+ }
+ 
+-static void __free_pages_ok(struct page *page, unsigned int order,
+-			    fpi_t fpi_flags)
++static void __free_pages_ok(struct page *page, unsigned int order)
+ {
+ 	unsigned long flags;
+ 	int migratetype;
+@@ -1524,8 +1522,7 @@
+ 	migratetype = get_pfnblock_migratetype(page, pfn);
+ 	local_irq_save(flags);
+ 	__count_vm_events(PGFREE, 1 << order);
+-	free_one_page(page_zone(page), page, pfn, order, migratetype,
+-		      fpi_flags);
++	free_one_page(page_zone(page), page, pfn, order, migratetype);
+ 	local_irq_restore(flags);
+ }
+ 
+@@ -1535,11 +1532,6 @@
+ 	struct page *p = page;
+ 	unsigned int loop;
+ 
+-	/*
+-	 * When initializing the memmap, __init_single_page() sets the refcount
+-	 * of all pages to 1 ("allocated"/"not free"). We have to set the
+-	 * refcount of all involved pages to 0.
+-	 */
+ 	prefetchw(p);
+ 	for (loop = 0; loop < (nr_pages - 1); loop++, p++) {
+ 		prefetchw(p + 1);
+@@ -1550,12 +1542,8 @@
+ 	set_page_count(p, 0);
+ 
+ 	atomic_long_add(nr_pages, &page_zone(page)->managed_pages);
+-
+-	/*
+-	 * Bypass PCP and place fresh pages right to the tail, primarily
+-	 * relevant for memory onlining.
+-	 */
+-	__free_pages_ok(page, order, FPI_TO_TAIL);
++	set_page_refcounted(page);
++	__free_pages(page, order);
+ }
+ 
+ #ifdef CONFIG_NEED_MULTIPLE_NODES
+@@ -3183,8 +3171,7 @@
+ 	 */
+ 	if (migratetype >= MIGRATE_PCPTYPES) {
+ 		if (unlikely(is_migrate_isolate(migratetype))) {
+-			free_one_page(zone, page, pfn, 0, migratetype,
+-				      FPI_NONE);
++			free_one_page(zone, page, pfn, 0, migratetype);
+ 			return;
+ 		}
+ 		migratetype = MIGRATE_MOVABLE;
+@@ -5007,7 +4994,7 @@
+ 	if (order == 0)		/* Via pcp? */
+ 		free_unref_page(page);
+ 	else
+-		__free_pages_ok(page, order, FPI_NONE);
++		__free_pages_ok(page, order);
+ }
+ 
+ void __free_pages(struct page *page, unsigned int order)
