@@ -11,7 +11,7 @@ _server=cpx51
 
 pkgbase=linux510-qca6390
 pkgname=('linux510-qca6390' 'linux510-qca6390-headers')
-_kernelname=-MANJARO
+_kernelname=-QCA6390
 _basekernel=5.10
 _basever=510
 pkgver=5.10.10
@@ -185,10 +185,10 @@ package_linux510-qca6390() {
   echo "${_basekernel}-${CARCH}" | install -Dm644 /dev/stdin "${pkgdir}/usr/lib/modules/${_kernver}/kernelbase"
 
   # add kernel version
-  echo "${pkgver}-${pkgrel}-MANJARO x64" > "${pkgdir}/boot/${pkgbase}-${CARCH}.kver"
+  echo "${pkgver}-${pkgrel}-QCA6390 x64" > "${pkgdir}/boot/${pkgbase}-${CARCH}.kver"
 
   # make room for external modules
-  local _extramodules="extramodules-${_basekernel}${_kernelname:--MANJARO}"
+  local _extramodules="extramodules-${_basekernel}${_kernelname:--QCA6390}"
   ln -s "../${_extramodules}" "${pkgdir}/usr/lib/modules/${_kernver}/extramodules"
 
   # add real version for building modules and running depmod from hook
