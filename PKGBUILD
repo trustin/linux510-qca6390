@@ -14,8 +14,8 @@ pkgname=('linux510-qca6390' 'linux510-qca6390-headers')
 _kernelname=-QCA6390
 _basekernel=5.10
 _basever=510
-pkgver=5.10.12
-pkgrel=3
+pkgver=5.10.13
+pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -38,7 +38,6 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         # ARCH Patches
         '0001-ZEN-Add-sysctl-and-CONFIG-to-disallow-unprivileged-CLONE_NEWUSER.patch'
         '0002-HID-quirks-Add-Apple-Magic-Trackpad-2-to-hid_have_special_driver-list.patch'
-        '0003-iwlwifi-Fix-regression-from-UDP-segmentation-support.patch'
         # Temp Fixes
         # MANJARO Patches
         '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
@@ -71,12 +70,11 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '9999-ath11k-qca6390-bringup-202012140938.patch'
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
-            '21e4e5e4286494f230c46efb198da34a0f25e13bd40606f4597e53434a29c6fe'
-            '5e6863f11fdef60930b9745082a7a0ce4d08bb61d4e72261efe482d936fa6168'
+            'daeb7733a16d2e6198f9201655bf7eb6a2cb0e1babc38c50ab1a3fbf789187a7'
+            '3f1a63e45c94cee760d515cce405353219946ef2010fb124cd84c25c121754c5'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             'df5843818f1571841e1a8bdbe38d7f853d841f38de46d6a6a5765de089495578'
-            '5791e6fd2ae2f4938b1190af65da3213cbfa2b3e7f50e6dcfdc8ded3ca17d720'
             '7823d7488f42bc4ed7dfae6d1014dbde679d8b862c9a3697a39ba0dae5918978'
             '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
             'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
