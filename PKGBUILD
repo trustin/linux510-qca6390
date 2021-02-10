@@ -162,7 +162,7 @@ package_linux510-qca6390() {
   pkgdesc="The ${pkgbase/linux/Linux} kernel and modules with QCA6390 (AX500-DBS) support"
   depends=('coreutils' 'linux-firmware' 'kmod' 'mkinitcpio>=27')
   optdepends=('crda: to set the correct wireless channels of your country')
-  provides=("linux=${pkgver}" VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE)
+  provides=("linux=${pkgver}" "linux510=${pkgver}" VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE)
 
   cd "${srcdir}/linux-${_basekernel}"
 
@@ -206,7 +206,7 @@ package_linux510-qca6390() {
 package_linux510-qca6390-headers() {
   pkgdesc="Header files and scripts for building modules for ${pkgbase/linux/Linux} kernel with QCA6390 (AX500-DBS) support"
   depends=('gawk' 'python' 'libelf')
-  provides=("linux-headers=$pkgver")
+  provides=("linux-headers=$pkgver" "linux510-headers=$pkgver")
 
   cd "${srcdir}/linux-${_basekernel}"
   local _builddir="${pkgdir}/usr/lib/modules/${_kernver}/build"
