@@ -14,7 +14,7 @@ pkgname=('linux510-qca6390' 'linux510-qca6390-headers')
 _kernelname=-QCA6390
 _basekernel=5.10
 _basever=510
-pkgver=5.10.14
+pkgver=5.10.15
 pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
@@ -70,7 +70,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '9999-ath11k-qca6390-bringup-202012140938.patch'
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
-            '9541437bd4a68d10d1f40f91080683fb6b8d99def258681b2fa74540d4f74082'
+            'fc126c14140668cc4bdbc8886fb8bc05ae734c5cf1e20b719b40b36d1dae255a'
             'c20356d721a56536c92b61f46e10a0a561d1c18b0eeeb2b94c6e0170465da5c5'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
