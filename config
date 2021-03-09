@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 5.10.20-1 Kernel Configuration
+# Linux/x86 5.10.22-1 Kernel Configuration
 #
 CONFIG_CC_VERSION_TEXT="gcc (GCC) 10.2.0"
 CONFIG_CC_IS_GCC=y
@@ -8856,7 +8856,6 @@ CONFIG_USB4=m
 #
 # Android
 #
-# CONFIG_ANDROID is not set
 # end of Android
 
 CONFIG_LIBNVDIMM=y
