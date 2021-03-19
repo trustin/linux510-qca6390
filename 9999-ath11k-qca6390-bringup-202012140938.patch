@@ -1,6 +1,6 @@
 diff -urN a/drivers/bus/mhi/core/init.c b/drivers/bus/mhi/core/init.c
---- a/drivers/bus/mhi/core/init.c	2021-01-22 16:45:27.470878260 +0900
-+++ b/drivers/bus/mhi/core/init.c	2021-01-22 16:45:48.021276637 +0900
+--- a/drivers/bus/mhi/core/init.c	2021-03-19 18:22:40.674510094 +0900
++++ b/drivers/bus/mhi/core/init.c	2021-03-19 18:22:56.224604778 +0900
 @@ -153,7 +153,7 @@
  	/* Setup BHI_INTVEC IRQ */
  	ret = request_threaded_irq(mhi_cntrl->irq[0], mhi_intvec_handler,
@@ -21,7 +21,7 @@ diff -urN a/drivers/bus/mhi/core/init.c b/drivers/bus/mhi/core/init.c
  			dev_err(dev, "Error requesting irq:%d for ev:%d\n",
 diff -urN a/drivers/bus/mhi/core/pm.c b/drivers/bus/mhi/core/pm.c
 --- a/drivers/bus/mhi/core/pm.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/bus/mhi/core/pm.c	2021-01-22 16:45:48.021276637 +0900
++++ b/drivers/bus/mhi/core/pm.c	2021-03-19 18:22:56.224604778 +0900
 @@ -55,12 +55,12 @@
  	},
  	{
@@ -39,7 +39,7 @@ diff -urN a/drivers/bus/mhi/core/pm.c b/drivers/bus/mhi/core/pm.c
  	},
 diff -urN a/drivers/net/wireless/ath/ath11k/ce.c b/drivers/net/wireless/ath/ath11k/ce.c
 --- a/drivers/net/wireless/ath/ath11k/ce.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/ce.c	2021-01-22 16:45:48.021276637 +0900
++++ b/drivers/net/wireless/ath/ath11k/ce.c	2021-03-19 18:22:56.224604778 +0900
 @@ -195,7 +195,7 @@
  	return false;
  }
@@ -49,7 +49,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/ce.c b/drivers/net/wireless/ath/ath1
  {
  	int i;
  
-@@ -459,20 +459,22 @@
+@@ -459,6 +459,7 @@
  	u32 msi_irq_start;
  	u32 addr_lo;
  	u32 addr_hi;
@@ -57,9 +57,8 @@ diff -urN a/drivers/net/wireless/ath/ath11k/ce.c b/drivers/net/wireless/ath/ath1
  	int ret;
  
  	ret = ath11k_get_user_msi_vector(ab, "CE",
- 					 &msi_data_count, &msi_data_start,
- 					 &msi_irq_start);
--
+@@ -467,12 +468,14 @@
+ 
  	if (ret)
  		return;
 +	vectors_32_capability = ab->hif.ops->is_32_vecs_support(ab);
@@ -76,17 +75,16 @@ diff -urN a/drivers/net/wireless/ath/ath11k/ce.c b/drivers/net/wireless/ath/ath1
  
 diff -urN a/drivers/net/wireless/ath/ath11k/ce.h b/drivers/net/wireless/ath/ath11k/ce.h
 --- a/drivers/net/wireless/ath/ath11k/ce.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/ce.h	2021-01-22 16:45:48.021276637 +0900
-@@ -190,4 +190,6 @@
++++ b/drivers/net/wireless/ath/ath11k/ce.h	2021-03-19 18:22:56.224604778 +0900
+@@ -190,4 +190,5 @@
  int ath11k_ce_attr_attach(struct ath11k_base *ab);
  void ath11k_ce_get_shadow_config(struct ath11k_base *ab,
  				 u32 **shadow_cfg, u32 *shadow_cfg_len);
 +void ath11k_ce_stop_shadow_timers(struct ath11k_base *ab);
-+
  #endif
 diff -urN a/drivers/net/wireless/ath/ath11k/core.c b/drivers/net/wireless/ath/ath11k/core.c
---- a/drivers/net/wireless/ath/ath11k/core.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/core.c	2021-01-22 16:45:48.021276637 +0900
+--- a/drivers/net/wireless/ath/ath11k/core.c	2021-03-19 18:22:40.761177288 +0900
++++ b/drivers/net/wireless/ath/ath11k/core.c	2021-03-19 18:22:56.227938132 +0900
 @@ -12,6 +12,7 @@
  #include "dp_rx.h"
  #include "debug.h"
@@ -159,18 +157,15 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.c b/drivers/net/wireless/ath/at
  	ret = ath11k_dp_tx_htt_h2t_ver_req_msg(ab);
  	if (ret) {
  		ath11k_err(ab, "failed to send htt version request message: %d\n",
-@@ -774,8 +784,10 @@
- 		complete(&ar->scan.started);
- 		complete(&ar->scan.completed);
- 		complete(&ar->peer_assoc_done);
-+		complete(&ar->peer_delete_done);
+@@ -777,6 +787,7 @@
+ 		complete(&ar->peer_delete_done);
  		complete(&ar->install_key_done);
  		complete(&ar->vdev_setup_done);
 +		complete(&ar->vdev_delete_done);
  		complete(&ar->bss_survey_done);
  		complete(&ar->thermal.wmi_sync);
  
-@@ -937,5 +949,45 @@
+@@ -938,5 +949,45 @@
  }
  EXPORT_SYMBOL(ath11k_core_alloc);
  
@@ -217,8 +212,8 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.c b/drivers/net/wireless/ath/at
  MODULE_DESCRIPTION("Core module for Qualcomm Atheros 802.11ax wireless LAN cards.");
  MODULE_LICENSE("Dual BSD/GPL");
 diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/ath11k/core.h
---- a/drivers/net/wireless/ath/ath11k/core.h	2021-01-22 16:45:27.517545816 +0900
-+++ b/drivers/net/wireless/ath/ath11k/core.h	2021-01-22 16:45:48.021276637 +0900
+--- a/drivers/net/wireless/ath/ath11k/core.h	2021-03-19 18:22:40.761177288 +0900
++++ b/drivers/net/wireless/ath/ath11k/core.h	2021-03-19 18:22:56.227938132 +0900
 @@ -427,12 +427,17 @@
  };
  
@@ -237,15 +232,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/at
  struct ath11k {
  	struct ath11k_base *ab;
  	struct ath11k_pdev *pdev;
-@@ -502,6 +507,7 @@
- 	u8 lmac_id;
- 
- 	struct completion peer_assoc_done;
-+	struct completion peer_delete_done;
- 
- 	int install_key_status;
- 	struct completion install_key_done;
-@@ -509,6 +515,7 @@
+@@ -510,6 +515,7 @@
  	int last_wmi_vdev_start_status;
  	struct ath11k_vdev_stop_status vdev_stop_status;
  	struct completion vdev_setup_done;
@@ -253,7 +240,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/at
  
  	int num_peers;
  	int max_num_peers;
-@@ -557,6 +564,9 @@
+@@ -558,6 +564,9 @@
  #endif
  	bool dfs_block_radar_events;
  	struct ath11k_thermal thermal;
@@ -263,7 +250,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/at
  };
  
  struct ath11k_band_cap {
-@@ -685,6 +695,7 @@
+@@ -686,6 +695,7 @@
  	bool wmi_ready;
  	u32 wlan_init_status;
  	int irq_num[ATH11K_IRQ_NUM_MAX];
@@ -271,7 +258,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/at
  	struct ath11k_ext_irq_grp ext_irq_grp[ATH11K_EXT_IRQ_GRP_NUM_MAX];
  	struct napi_struct *napi;
  	struct ath11k_targ_cap target_caps;
-@@ -887,6 +898,8 @@
+@@ -888,6 +898,8 @@
  void ath11k_core_free_bdf(struct ath11k_base *ab, struct ath11k_board_data *bd);
  
  void ath11k_core_halt(struct ath11k *ar);
@@ -282,7 +269,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/at
  						    const char *filename);
 diff -urN a/drivers/net/wireless/ath/ath11k/dp.c b/drivers/net/wireless/ath/ath11k/dp.c
 --- a/drivers/net/wireless/ath/ath11k/dp.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/dp.c	2021-01-22 16:45:48.024610037 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp.c	2021-03-19 18:22:56.227938132 +0900
 @@ -180,13 +180,15 @@
  {
  	int msi_group_number, msi_data_count;
@@ -322,7 +309,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/dp.c b/drivers/net/wireless/ath/ath1
  
 diff -urN a/drivers/net/wireless/ath/ath11k/dp.h b/drivers/net/wireless/ath/ath11k/dp.h
 --- a/drivers/net/wireless/ath/ath11k/dp.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/dp.h	2021-01-22 16:45:48.024610037 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp.h	2021-03-19 18:22:56.227938132 +0900
 @@ -40,6 +40,7 @@
  
  #define DP_REO_DESC_FREE_THRESHOLD  64
@@ -339,8 +326,8 @@ diff -urN a/drivers/net/wireless/ath/ath11k/dp.h b/drivers/net/wireless/ath/ath1
 +void ath11k_dp_stop_shadow_timers(struct ath11k_base *ab);
  #endif
 diff -urN a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/ath11k/dp_rx.c
---- a/drivers/net/wireless/ath/ath11k/dp_rx.c	2021-01-22 16:45:27.517545816 +0900
-+++ b/drivers/net/wireless/ath/ath11k/dp_rx.c	2021-01-22 16:45:48.024610037 +0900
+--- a/drivers/net/wireless/ath/ath11k/dp_rx.c	2021-03-19 18:22:40.761177288 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c	2021-03-19 18:22:56.227938132 +0900
 @@ -274,6 +274,29 @@
  		  msecs_to_jiffies(ATH11K_MON_TIMER_INTERVAL));
  }
@@ -409,7 +396,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/a
  			if (FIELD_GET(HAL_TLV_HDR_TAG, tlv->tl) !=
 diff -urN a/drivers/net/wireless/ath/ath11k/dp_rx.h b/drivers/net/wireless/ath/ath11k/dp_rx.h
 --- a/drivers/net/wireless/ath/ath11k/dp_rx.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/dp_rx.h	2021-01-22 16:45:48.027943436 +0900
++++ b/drivers/net/wireless/ath/ath11k/dp_rx.h	2021-03-19 18:22:56.227938132 +0900
 @@ -90,5 +90,5 @@
  int ath11k_dp_rx_pdev_mon_detach(struct ath11k *ar);
  int ath11k_dp_rx_pdev_mon_attach(struct ath11k *ar);
@@ -419,7 +406,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/dp_rx.h b/drivers/net/wireless/ath/a
  #endif /* ATH11K_DP_RX_H */
 diff -urN a/drivers/net/wireless/ath/ath11k/hif.h b/drivers/net/wireless/ath/ath11k/hif.h
 --- a/drivers/net/wireless/ath/ath11k/hif.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/hif.h	2021-01-22 16:45:48.027943436 +0900
++++ b/drivers/net/wireless/ath/ath11k/hif.h	2021-03-19 18:22:56.227938132 +0900
 @@ -17,6 +17,9 @@
  	void (*stop)(struct ath11k_base *sc);
  	int (*power_up)(struct ath11k_base *sc);
@@ -478,7 +465,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/hif.h b/drivers/net/wireless/ath/ath
  	return sc->hif.ops->read32(sc, address);
 diff -urN a/drivers/net/wireless/ath/ath11k/htc.c b/drivers/net/wireless/ath/ath11k/htc.c
 --- a/drivers/net/wireless/ath/ath11k/htc.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/htc.c	2021-01-22 16:45:48.027943436 +0900
++++ b/drivers/net/wireless/ath/ath11k/htc.c	2021-03-19 18:22:56.227938132 +0900
 @@ -60,9 +60,11 @@
  	memset(hdr, 0, sizeof(*hdr));
  	hdr->htc_info = FIELD_PREP(HTC_HDR_ENDPOINTID, ep->eid) |
@@ -548,7 +535,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/htc.c b/drivers/net/wireless/ath/ath
  	switch (ab->wmi_ab.preferred_hw_mode) {
 diff -urN a/drivers/net/wireless/ath/ath11k/htc.h b/drivers/net/wireless/ath/ath11k/htc.h
 --- a/drivers/net/wireless/ath/ath11k/htc.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/htc.h	2021-01-22 16:45:48.027943436 +0900
++++ b/drivers/net/wireless/ath/ath11k/htc.h	2021-03-19 18:22:56.227938132 +0900
 @@ -13,6 +13,7 @@
  #include <linux/timer.h>
  
@@ -557,19 +544,18 @@ diff -urN a/drivers/net/wireless/ath/ath11k/htc.h b/drivers/net/wireless/ath/ath
  
  #define HTC_HDR_ENDPOINTID                       GENMASK(7, 0)
  #define HTC_HDR_FLAGS                            GENMASK(15, 8)
-@@ -65,7 +66,10 @@
+@@ -65,7 +66,9 @@
  	ATH11K_HTC_MSG_CONNECT_SERVICE_RESP_ID = 3,
  	ATH11K_HTC_MSG_SETUP_COMPLETE_ID       = 4,
  	ATH11K_HTC_MSG_SETUP_COMPLETE_EX_ID    = 5,
 -	ATH11K_HTC_MSG_SEND_SUSPEND_COMPLETE   = 6
 +	ATH11K_HTC_MSG_SEND_SUSPEND_COMPLETE   = 6,
-+	ATH11K_HTC_MSG_NACK_SUSPEND	       = 7,
++	ATH11K_HTC_MSG_NACK_SUSPEND            = 7,
 +	ATH11K_HTC_MSG_WAKEUP_FROM_SUSPEND_ID  = 8
-+
  };
  
  enum ath11k_htc_version {
-@@ -222,7 +226,8 @@
+@@ -222,7 +225,8 @@
  };
  
  struct ath11k_htc_ops {
@@ -581,7 +567,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/htc.h b/drivers/net/wireless/ath/ath
  struct ath11k_htc_ep_ops {
 diff -urN a/drivers/net/wireless/ath/ath11k/hw.h b/drivers/net/wireless/ath/ath11k/hw.h
 --- a/drivers/net/wireless/ath/ath11k/hw.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/hw.h	2021-01-22 16:45:48.027943436 +0900
++++ b/drivers/net/wireless/ath/ath11k/hw.h	2021-03-19 18:22:56.227938132 +0900
 @@ -143,12 +143,6 @@
  
  	bool single_pdev_only;
@@ -604,17 +590,9 @@ diff -urN a/drivers/net/wireless/ath/ath11k/hw.h b/drivers/net/wireless/ath/ath1
  
  struct ath11k_hw_ops {
 diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath11k/mac.c
---- a/drivers/net/wireless/ath/ath11k/mac.c	2021-01-22 16:45:27.517545816 +0900
-+++ b/drivers/net/wireless/ath/ath11k/mac.c	2021-01-22 16:45:48.027943436 +0900
-@@ -2986,6 +2986,7 @@
- 	}
- 
- 	if (ab->hw_params.vdev_start_delay &&
-+	    !arvif->is_started &&
- 	    arvif->vdev_type != WMI_VDEV_TYPE_AP) {
- 		ret = ath11k_start_vdev_delay(ar->hw, vif);
- 		if (ret) {
-@@ -4116,6 +4117,10 @@
+--- a/drivers/net/wireless/ath/ath11k/mac.c	2021-03-19 18:22:40.761177288 +0900
++++ b/drivers/net/wireless/ath/ath11k/mac.c	2021-03-19 18:23:38.768196061 +0900
+@@ -4117,6 +4117,10 @@
  						       &tlv_filter);
  	}
  
@@ -625,31 +603,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
  	return ret;
  }
  
-@@ -4588,8 +4593,22 @@
- 
- err_peer_del:
- 	if (arvif->vdev_type == WMI_VDEV_TYPE_AP) {
-+		reinit_completion(&ar->peer_delete_done);
-+
-+		ret = ath11k_wmi_send_peer_delete_cmd(ar, vif->addr,
-+						      arvif->vdev_id);
-+		if (ret) {
-+			ath11k_warn(ar->ab, "failed to delete peer vdev_id %d addr %pM\n",
-+				    arvif->vdev_id, vif->addr);
-+			return ret;
-+		}
-+
-+		ret = ath11k_wait_for_peer_delete_done(ar, arvif->vdev_id,
-+						       vif->addr);
-+		if (ret)
-+			return ret;
-+
- 		ar->num_peers--;
--		ath11k_wmi_send_peer_delete_cmd(ar, vif->addr, arvif->vdev_id);
- 	}
- 
- err_vdev_del:
-@@ -4624,6 +4643,7 @@
+@@ -4640,6 +4644,7 @@
  	struct ath11k *ar = hw->priv;
  	struct ath11k_vif *arvif = ath11k_vif_to_arvif(vif);
  	struct ath11k_base *ab = ar->ab;
@@ -657,7 +611,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
  	int ret;
  	int i;
  
-@@ -4632,10 +4652,6 @@
+@@ -4648,10 +4653,6 @@
  	ath11k_dbg(ab, ATH11K_DBG_MAC, "mac remove interface (vdev %d)\n",
  		   arvif->vdev_id);
  
@@ -668,7 +622,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
  	if (arvif->vdev_type == WMI_VDEV_TYPE_AP) {
  		ret = ath11k_peer_delete(ar, arvif->vdev_id, vif->addr);
  		if (ret)
-@@ -4643,16 +4659,33 @@
+@@ -4659,16 +4660,32 @@
  				    arvif->vdev_id, ret);
  	}
  
@@ -692,7 +646,6 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
 +	ab->free_vdev_map |= 1LL << (arvif->vdev_id);
 +	ar->allocated_vdev_map &= ~(1LL << arvif->vdev_id);
  	ar->num_created_vdevs--;
-+
  	ath11k_dbg(ab, ATH11K_DBG_MAC, "vdev %pM deleted, vdev_id %d\n",
  		   vif->addr, arvif->vdev_id);
 -	ar->allocated_vdev_map &= ~(1LL << arvif->vdev_id);
@@ -705,36 +658,15 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
  
  	ath11k_peer_cleanup(ar, arvif->vdev_id);
  
-@@ -5233,7 +5266,8 @@
- 	/* for QCA6390 bss peer must be created before vdev_start */
- 	if (ab->hw_params.vdev_start_delay &&
- 	    arvif->vdev_type != WMI_VDEV_TYPE_AP &&
--	    arvif->vdev_type != WMI_VDEV_TYPE_MONITOR) {
-+	    arvif->vdev_type != WMI_VDEV_TYPE_MONITOR &&
-+	    !ath11k_peer_find_by_vdev_id(ab, arvif->vdev_id)) {
- 		memcpy(&arvif->chanctx, ctx, sizeof(*ctx));
- 		ret = 0;
- 		goto out;
-@@ -5244,7 +5278,9 @@
- 		goto out;
- 	}
- 
--	if (ab->hw_params.vdev_start_delay) {
-+	if (ab->hw_params.vdev_start_delay &&
-+	    (arvif->vdev_type == WMI_VDEV_TYPE_AP ||
-+	    arvif->vdev_type == WMI_VDEV_TYPE_MONITOR)) {
- 		param.vdev_id = arvif->vdev_id;
- 		param.peer_type = WMI_PEER_TYPE_DEFAULT;
- 		param.peer_addr = ar->mac_addr;
-@@ -6411,12 +6447,16 @@
+@@ -6430,6 +6447,7 @@
  		INIT_LIST_HEAD(&ar->ppdu_stats_info);
  		mutex_init(&ar->conf_mutex);
  		init_completion(&ar->vdev_setup_done);
 +		init_completion(&ar->vdev_delete_done);
  		init_completion(&ar->peer_assoc_done);
-+		init_completion(&ar->peer_delete_done);
+ 		init_completion(&ar->peer_delete_done);
  		init_completion(&ar->install_key_done);
- 		init_completion(&ar->bss_survey_done);
+@@ -6437,6 +6455,8 @@
  		init_completion(&ar->scan.started);
  		init_completion(&ar->scan.completed);
  		init_completion(&ar->thermal.wmi_sync);
@@ -743,7 +675,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
  
  		INIT_DELAYED_WORK(&ar->scan.timeout, ath11k_scan_timeout_work);
  		INIT_WORK(&ar->regd_update_work, ath11k_regd_update_work);
-@@ -6450,3 +6490,29 @@
+@@ -6470,3 +6490,29 @@
  		pdev->ar = NULL;
  	}
  }
@@ -775,7 +707,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath
 +}
 diff -urN a/drivers/net/wireless/ath/ath11k/mac.h b/drivers/net/wireless/ath/ath11k/mac.h
 --- a/drivers/net/wireless/ath/ath11k/mac.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/mac.h	2021-01-22 16:45:48.031276835 +0900
++++ b/drivers/net/wireless/ath/ath11k/mac.h	2021-03-19 18:22:56.231271486 +0900
 @@ -146,4 +146,6 @@
  u8 ath11k_mac_bw_to_mac80211_bw(u8 bw);
  enum ath11k_supported_bw ath11k_mac_mac80211_bw_to_ath11k_bw(enum rate_info_bw bw);
@@ -785,7 +717,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mac.h b/drivers/net/wireless/ath/ath
  #endif
 diff -urN a/drivers/net/wireless/ath/ath11k/Makefile b/drivers/net/wireless/ath/ath11k/Makefile
 --- a/drivers/net/wireless/ath/ath11k/Makefile	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/Makefile	2021-01-22 16:45:48.031276835 +0900
++++ b/drivers/net/wireless/ath/ath11k/Makefile	2021-03-19 18:22:56.231271486 +0900
 @@ -16,7 +16,8 @@
  	    ce.o \
  	    peer.o \
@@ -798,7 +730,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/Makefile b/drivers/net/wireless/ath/
  ath11k-$(CONFIG_NL80211_TESTMODE) += testmode.o
 diff -urN a/drivers/net/wireless/ath/ath11k/mhi.c b/drivers/net/wireless/ath/ath11k/mhi.c
 --- a/drivers/net/wireless/ath/ath11k/mhi.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/mhi.c	2021-01-22 16:45:48.031276835 +0900
++++ b/drivers/net/wireless/ath/ath11k/mhi.c	2021-03-19 18:22:56.231271486 +0900
 @@ -156,14 +156,17 @@
  {
  	struct ath11k_base *ab = ab_pci->ab;
@@ -860,7 +792,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mhi.c b/drivers/net/wireless/ath/ath
  		break;
  	case ATH11K_MHI_TRIGGER_RDDM:
  		ret = mhi_force_rddm_mode(ab_pci->mhi_ctrl);
-@@ -465,3 +483,18 @@
+@@ -465,3 +483,17 @@
  	ath11k_mhi_set_state(ab_pci, ATH11K_MHI_DEINIT);
  }
  
@@ -878,10 +810,9 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mhi.c b/drivers/net/wireless/ath/ath
 +{
 +	ath11k_mhi_set_state(ab_pci, ATH11K_MHI_TRIGGER_RDDM);
 +}
-+
 diff -urN a/drivers/net/wireless/ath/ath11k/mhi.h b/drivers/net/wireless/ath/ath11k/mhi.h
 --- a/drivers/net/wireless/ath/ath11k/mhi.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/mhi.h	2021-01-22 16:45:48.031276835 +0900
++++ b/drivers/net/wireless/ath/ath11k/mhi.h	2021-03-19 18:22:56.231271486 +0900
 @@ -36,4 +36,8 @@
  void ath11k_mhi_set_mhictrl_reset(struct ath11k_base *ab);
  void ath11k_mhi_clear_vector(struct ath11k_base *ab);
@@ -893,7 +824,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/mhi.h b/drivers/net/wireless/ath/ath
  #endif
 diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath11k/pci.c
 --- a/drivers/net/wireless/ath/ath11k/pci.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/pci.c	2021-01-22 16:45:48.031276835 +0900
++++ b/drivers/net/wireless/ath/ath11k/pci.c	2021-03-19 18:22:56.231271486 +0900
 @@ -17,6 +17,7 @@
  #define ATH11K_PCI_DMA_MASK		32
  
@@ -1137,11 +1068,9 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  }
  
  static void ath11k_pci_ce_irqs_disable(struct ath11k_base *ab)
-@@ -382,18 +534,28 @@
- 
+@@ -383,17 +535,26 @@
  static void ath11k_pci_ce_tasklet(unsigned long data)
  {
-+
  	struct ath11k_ce_pipe *ce_pipe = (struct ath11k_ce_pipe *)data;
 +	int irq_idx = ATH11K_PCI_IRQ_CE0_OFFSET + ce_pipe->pipe_num;
  
@@ -1168,7 +1097,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	tasklet_schedule(&ce_pipe->intr_tq);
  
  	return IRQ_HANDLED;
-@@ -402,9 +564,16 @@
+@@ -402,9 +563,16 @@
  static void ath11k_pci_ext_grp_disable(struct ath11k_ext_irq_grp *irq_grp)
  {
  	int i;
@@ -1187,7 +1116,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  }
  
  static void __ath11k_pci_ext_irq_disable(struct ath11k_base *sc)
-@@ -424,9 +593,15 @@
+@@ -424,9 +592,15 @@
  static void ath11k_pci_ext_grp_enable(struct ath11k_ext_irq_grp *irq_grp)
  {
  	int i;
@@ -1205,7 +1134,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  }
  
  static void ath11k_pci_ext_irq_enable(struct ath11k_base *ab)
-@@ -468,11 +643,13 @@
+@@ -468,11 +642,13 @@
  						napi);
  	struct ath11k_base *ab = irq_grp->ab;
  	int work_done;
@@ -1220,7 +1149,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	}
  
  	if (work_done > budget)
-@@ -484,10 +661,16 @@
+@@ -484,10 +660,16 @@
  static irqreturn_t ath11k_pci_ext_interrupt_handler(int irq, void *arg)
  {
  	struct ath11k_ext_irq_grp *irq_grp = arg;
@@ -1239,7 +1168,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  
  	napi_schedule(&irq_grp->napi);
  
-@@ -498,6 +681,7 @@
+@@ -498,6 +680,7 @@
  {
  	int i, j, ret, num_vectors = 0;
  	u32 user_base_data = 0, base_vector = 0;
@@ -1247,7 +1176,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  
  	ret = ath11k_pci_get_user_msi_assignment(ath11k_pci_priv(ab), "DP",
  						 &num_vectors,
-@@ -506,6 +690,8 @@
+@@ -506,6 +689,8 @@
  	if (ret < 0)
  		return ret;
  
@@ -1256,7 +1185,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	for (i = 0; i < ATH11K_EXT_IRQ_GRP_NUM_MAX; i++) {
  		struct ath11k_ext_irq_grp *irq_grp = &ab->ext_irq_grp[i];
  		u32 num_irq = 0;
-@@ -528,11 +714,12 @@
+@@ -528,11 +713,12 @@
  		}
  
  		irq_grp->num_irq = num_irq;
@@ -1271,7 +1200,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  			int irq = ath11k_pci_get_msi_irq(ab->dev, vector);
  
  			ab->irq_num[irq_idx] = irq;
-@@ -540,7 +727,7 @@
+@@ -540,7 +726,7 @@
  			ath11k_dbg(ab, ATH11K_DBG_PCI,
  				   "irq:%d group:%d\n", irq, i);
  			ret = request_irq(irq, ath11k_pci_ext_interrupt_handler,
@@ -1280,7 +1209,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  					  "DP_EXT_IRQ", irq_grp);
  			if (ret) {
  				ath11k_err(ab, "failed request irq %d: %d\n",
-@@ -548,7 +735,11 @@
+@@ -548,7 +734,11 @@
  				return ret;
  			}
  
@@ -1293,7 +1222,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  		}
  	}
  
-@@ -561,6 +752,7 @@
+@@ -561,6 +751,7 @@
  	u32 msi_data_start;
  	u32 msi_data_count;
  	u32 msi_irq_start;
@@ -1301,7 +1230,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	unsigned int msi_data;
  	int irq, i, ret, irq_idx;
  
-@@ -570,9 +762,13 @@
+@@ -570,9 +761,12 @@
  	if (ret)
  		return ret;
  
@@ -1312,11 +1241,10 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
 -		msi_data = (i % msi_data_count) + msi_irq_start;
 +		msi_data = vecs_32_cap ?
 +			   (i % msi_data_count) + msi_irq_start : msi_irq_start;
-+
  		irq = ath11k_pci_get_msi_irq(ab->dev, msi_data);
  		ce_pipe = &ab->ce.ce_pipe[i];
  
-@@ -585,7 +781,7 @@
+@@ -585,7 +779,7 @@
  			     (unsigned long)ce_pipe);
  
  		ret = request_irq(irq, ath11k_pci_ce_interrupt_handler,
@@ -1325,7 +1253,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  				  ce_pipe);
  		if (ret) {
  			ath11k_err(ab, "failed to request irq %d: %d\n",
-@@ -641,14 +837,19 @@
+@@ -641,14 +835,18 @@
  					    msi_config.total_vectors,
  					    msi_config.total_vectors,
  					    PCI_IRQ_MSI);
@@ -1337,7 +1265,6 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
 -			return -EINVAL;
 -		else
 -			return num_vectors;
-+
 +	if (num_vectors == msi_config.total_vectors) {
 +		ab_pci->vectors_32_capability = 1;
 +	} else {
@@ -1353,7 +1280,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	}
  
  	msi_desc = irq_get_msi_desc(ab_pci->pdev->irq);
-@@ -658,7 +859,11 @@
+@@ -658,7 +856,11 @@
  		goto free_msi_vector;
  	}
  
@@ -1365,7 +1292,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  
  	ath11k_dbg(ab, ATH11K_DBG_PCI, "msi base data is %d\n", ab_pci->msi_ep_base_data);
  
-@@ -667,6 +872,7 @@
+@@ -667,6 +869,7 @@
  free_msi_vector:
  	pci_free_irq_vectors(ab_pci->pdev);
  
@@ -1373,7 +1300,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	return ret;
  }
  
-@@ -675,6 +881,32 @@
+@@ -675,6 +878,32 @@
  	pci_free_irq_vectors(ab_pci->pdev);
  }
  
@@ -1397,7 +1324,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
 +
 +	return 0;
 +
-+ free_msi_vector:
++free_msi_vector:
 +	pci_free_irq_vectors(ab_pci->pdev);
 +
 +	return ret;
@@ -1406,7 +1333,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  static int ath11k_pci_claim(struct ath11k_pci *ab_pci, struct pci_dev *pdev)
  {
  	struct ath11k_base *ab = ab_pci->ab;
-@@ -764,7 +996,12 @@
+@@ -764,7 +993,12 @@
  
  	ab_pci->register_window = 0;
  	clear_bit(ATH11K_PCI_FLAG_INIT_DONE, &ab_pci->flags);
@@ -1420,7 +1347,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  
  	ret = ath11k_mhi_start(ab_pci);
  	if (ret) {
-@@ -779,10 +1016,44 @@
+@@ -779,10 +1013,44 @@
  {
  	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
  
@@ -1467,7 +1394,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  }
  
  static void ath11k_pci_kill_tasklets(struct ath11k_base *ab)
-@@ -799,11 +1070,16 @@
+@@ -799,11 +1067,16 @@
  	}
  }
  
@@ -1485,7 +1412,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	ath11k_ce_cleanup_pipes(ab);
  }
  
-@@ -813,12 +1089,28 @@
+@@ -813,12 +1086,28 @@
  
  	set_bit(ATH11K_PCI_FLAG_INIT_DONE, &ab_pci->flags);
  
@@ -1514,7 +1441,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  static int ath11k_pci_map_service_to_pipe(struct ath11k_base *ab, u16 service_id,
  					  u8 *ul_pipe, u8 *dl_pipe)
  {
-@@ -862,6 +1154,11 @@
+@@ -862,6 +1151,11 @@
  	return 0;
  }
  
@@ -1526,7 +1453,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  static const struct ath11k_hif_ops ath11k_pci_hif_ops = {
  	.start = ath11k_pci_start,
  	.stop = ath11k_pci_stop,
-@@ -869,11 +1166,17 @@
+@@ -869,11 +1163,17 @@
  	.write32 = ath11k_pci_write32,
  	.power_down = ath11k_pci_power_down,
  	.power_up = ath11k_pci_power_up,
@@ -1544,7 +1471,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  };
  
  static int ath11k_pci_probe(struct pci_dev *pdev,
-@@ -972,6 +1275,13 @@
+@@ -972,6 +1272,13 @@
  		goto err_ce_free;
  	}
  
@@ -1558,7 +1485,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  	ret = ath11k_core_init(ab);
  	if (ret) {
  		ath11k_err(ab, "failed to init core: %d\n", ret);
-@@ -1030,12 +1340,43 @@
+@@ -1030,12 +1337,43 @@
  	ath11k_pci_power_down(ab);
  }
  
@@ -1604,7 +1531,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.c b/drivers/net/wireless/ath/ath
  static int ath11k_pci_init(void)
 diff -urN a/drivers/net/wireless/ath/ath11k/pci.h b/drivers/net/wireless/ath/ath11k/pci.h
 --- a/drivers/net/wireless/ath/ath11k/pci.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/pci.h	2021-01-22 16:45:48.031276835 +0900
++++ b/drivers/net/wireless/ath/ath11k/pci.h	2021-03-19 18:22:56.231271486 +0900
 @@ -24,6 +24,31 @@
  /* register used for handshake mechanism to validate UMAC is awake */
  #define PCIE_SOC_WAKE_PCIE_LOCAL_REG		0x3004
@@ -1662,120 +1589,9 @@ diff -urN a/drivers/net/wireless/ath/ath11k/pci.h b/drivers/net/wireless/ath/ath
  };
  
  static inline struct ath11k_pci *ath11k_pci_priv(struct ath11k_base *ab)
-diff -urN a/drivers/net/wireless/ath/ath11k/peer.c b/drivers/net/wireless/ath/ath11k/peer.c
---- a/drivers/net/wireless/ath/ath11k/peer.c	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/peer.c	2021-01-22 16:45:48.031276835 +0900
-@@ -76,6 +76,23 @@
- 	return NULL;
- }
- 
-+struct ath11k_peer *ath11k_peer_find_by_vdev_id(struct ath11k_base *ab,
-+						int vdev_id)
-+{
-+	struct ath11k_peer *peer;
-+
-+	spin_lock_bh(&ab->base_lock);
-+
-+	list_for_each_entry(peer, &ab->peers, list) {
-+		if (vdev_id == peer->vdev_id) {
-+			spin_unlock_bh(&ab->base_lock);
-+			return peer;
-+		}
-+	}
-+	spin_unlock_bh(&ab->base_lock);
-+	return NULL;
-+}
-+
- void ath11k_peer_unmap_event(struct ath11k_base *ab, u16 peer_id)
- {
- 	struct ath11k_peer *peer;
-@@ -177,12 +194,36 @@
- 	return ath11k_wait_for_peer_common(ar->ab, vdev_id, addr, false);
- }
- 
-+int ath11k_wait_for_peer_delete_done(struct ath11k *ar, u32 vdev_id,
-+				     const u8 *addr)
-+{
-+	int ret;
-+	unsigned long time_left;
-+
-+	ret = ath11k_wait_for_peer_deleted(ar, vdev_id, addr);
-+	if (ret) {
-+		ath11k_warn(ar->ab, "failed wait for peer deleted");
-+		return ret;
-+	}
-+
-+	time_left = wait_for_completion_timeout(&ar->peer_delete_done,
-+						3 * HZ);
-+	if (time_left == 0) {
-+		ath11k_warn(ar->ab, "Timeout in receiving peer delete response\n");
-+		return -ETIMEDOUT;
-+	}
-+
-+	return 0;
-+}
-+
- int ath11k_peer_delete(struct ath11k *ar, u32 vdev_id, u8 *addr)
- {
- 	int ret;
- 
- 	lockdep_assert_held(&ar->conf_mutex);
- 
-+	reinit_completion(&ar->peer_delete_done);
-+
- 	ret = ath11k_wmi_send_peer_delete_cmd(ar, addr, vdev_id);
- 	if (ret) {
- 		ath11k_warn(ar->ab,
-@@ -191,7 +232,7 @@
- 		return ret;
- 	}
- 
--	ret = ath11k_wait_for_peer_deleted(ar, vdev_id, addr);
-+	ret = ath11k_wait_for_peer_delete_done(ar, vdev_id, addr);
- 	if (ret)
- 		return ret;
- 
-@@ -247,8 +288,22 @@
- 		spin_unlock_bh(&ar->ab->base_lock);
- 		ath11k_warn(ar->ab, "failed to find peer %pM on vdev %i after creation\n",
- 			    param->peer_addr, param->vdev_id);
--		ath11k_wmi_send_peer_delete_cmd(ar, param->peer_addr,
--						param->vdev_id);
-+
-+		reinit_completion(&ar->peer_delete_done);
-+
-+		ret = ath11k_wmi_send_peer_delete_cmd(ar, param->peer_addr,
-+						      param->vdev_id);
-+		if (ret) {
-+			ath11k_warn(ar->ab, "failed to delete peer vdev_id %d addr %pM\n",
-+				    param->vdev_id, param->peer_addr);
-+			return ret;
-+		}
-+
-+		ret = ath11k_wait_for_peer_delete_done(ar, param->vdev_id,
-+						       param->peer_addr);
-+		if (ret)
-+			return ret;
-+
- 		return -ENOENT;
- 	}
- 
-diff -urN a/drivers/net/wireless/ath/ath11k/peer.h b/drivers/net/wireless/ath/ath11k/peer.h
---- a/drivers/net/wireless/ath/ath11k/peer.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/peer.h	2021-01-22 16:45:48.031276835 +0900
-@@ -41,5 +41,9 @@
- int ath11k_peer_delete(struct ath11k *ar, u32 vdev_id, u8 *addr);
- int ath11k_peer_create(struct ath11k *ar, struct ath11k_vif *arvif,
- 		       struct ieee80211_sta *sta, struct peer_create_params *param);
-+int ath11k_wait_for_peer_delete_done(struct ath11k *ar, u32 vdev_id,
-+				     const u8 *addr);
-+struct ath11k_peer *ath11k_peer_find_by_vdev_id(struct ath11k_base *ab,
-+						int vdev_id);
- 
- #endif /* _PEER_H_ */
 diff -urN a/drivers/net/wireless/ath/ath11k/qmi.c b/drivers/net/wireless/ath/ath11k/qmi.c
---- a/drivers/net/wireless/ath/ath11k/qmi.c	2021-01-22 16:45:27.517545816 +0900
-+++ b/drivers/net/wireless/ath/ath11k/qmi.c	2021-01-22 16:45:48.034610234 +0900
+--- a/drivers/net/wireless/ath/ath11k/qmi.c	2021-03-19 18:22:40.761177288 +0900
++++ b/drivers/net/wireless/ath/ath11k/qmi.c	2021-03-19 18:22:56.231271486 +0900
 @@ -1680,6 +1680,10 @@
  			req->mem_seg[i].addr = ab->qmi.target_mem[i].paddr;
  			req->mem_seg[i].size = ab->qmi.target_mem[i].size;
@@ -1787,23 +1603,15 @@ diff -urN a/drivers/net/wireless/ath/ath11k/qmi.c b/drivers/net/wireless/ath/ath
  		}
  	}
  
-@@ -1747,6 +1751,7 @@
- 
- 	ab->qmi.target_mem_delayed = false;
- 
-+	ab->qmi.target_mem_delayed = false;
- 	for (i = 0; i < ab->qmi.mem_seg_count; i++) {
- 		chunk = &ab->qmi.target_mem[i];
- 		chunk->vaddr = dma_alloc_coherent(ab->dev,
 diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath11k/wmi.c
---- a/drivers/net/wireless/ath/ath11k/wmi.c	2021-01-22 16:45:27.520879214 +0900
-+++ b/drivers/net/wireless/ath/ath11k/wmi.c	2021-01-22 16:45:48.034610234 +0900
+--- a/drivers/net/wireless/ath/ath11k/wmi.c	2021-03-19 18:22:40.764510642 +0900
++++ b/drivers/net/wireless/ath/ath11k/wmi.c	2021-03-19 18:22:56.231271486 +0900
 @@ -122,6 +122,8 @@
  		= { .min_len = sizeof(struct wmi_stats_event) },
  	[WMI_TAG_PDEV_CTL_FAILSAFE_CHECK_EVENT]
  		= { .min_len = sizeof(struct wmi_pdev_ctl_failsafe_chk_event) },
-+	[WMI_TAG_VDEV_DELETE_RESP_EVENT] = {
-+		.min_len = sizeof(struct wmi_vdev_delete_resp_event) },
++	[WMI_TAG_VDEV_DELETE_RESP_EVENT]
++		= { .min_len = sizeof(struct wmi_vdev_delete_resp_event) },
  };
  
  #define PRIMAP(_hw_mode_) \
@@ -1895,35 +1703,10 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath
  static int ath11k_pull_bcn_tx_status_ev(struct ath11k_base *ab, void *evt_buf,
  					u32 len, u32 *vdev_id,
  					u32 *tx_status)
-@@ -5532,15 +5589,54 @@
- static void ath11k_peer_delete_resp_event(struct ath11k_base *ab, struct sk_buff *skb)
- {
- 	struct wmi_peer_delete_resp_event peer_del_resp;
-+	struct ath11k *ar;
+@@ -5554,6 +5611,34 @@
+ 		   peer_del_resp.vdev_id, peer_del_resp.peer_macaddr.addr);
+ }
  
- 	if (ath11k_pull_peer_del_resp_ev(ab, skb, &peer_del_resp) != 0) {
- 		ath11k_warn(ab, "failed to extract peer delete resp");
- 		return;
- 	}
- 
--	/* TODO: Do we need to validate whether ath11k_peer_find() return NULL
--	 *	 Why this is needed when there is HTT event for peer delete
--	 */
-+	rcu_read_lock();
-+	ar = ath11k_mac_get_ar_by_vdev_id(ab, peer_del_resp.vdev_id);
-+	if (!ar) {
-+		ath11k_warn(ab, "invalid vdev id in peer delete resp ev %d",
-+			    peer_del_resp.vdev_id);
-+		rcu_read_unlock();
-+		return;
-+	}
-+
-+	complete(&ar->peer_delete_done);
-+	rcu_read_unlock();
-+	ath11k_dbg(ab, ATH11K_DBG_WMI, "peer delete resp for vdev id %d addr %pM\n",
-+		   peer_del_resp.vdev_id, peer_del_resp.peer_macaddr.addr);
-+}
-+
 +static void ath11k_vdev_delete_resp_event(struct ath11k_base *ab,
 +					  struct sk_buff *skb)
 +{
@@ -1950,16 +1733,18 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath
 +
 +	ath11k_dbg(ab, ATH11K_DBG_WMI, "vdev delete resp for vdev id %d\n",
 +		   vdev_id);
- }
- 
++}
++
  static inline const char *ath11k_wmi_vdev_resp_print(u32 vdev_resp_status)
-@@ -6398,6 +6494,58 @@
+ {
+ 	switch (vdev_resp_status) {
+@@ -6409,6 +6494,58 @@
  	ath11k_thermal_event_temperature(ar, ev.temp);
  }
  
 +static int ath11k_wow_wakeup_host_parse(struct ath11k_base *ab,
 +					u16 tag, u16 len,
-+					    const void *ptr, void *data)
++					const void *ptr, void *data)
 +{
 +	struct wmi_wow_ev_arg *ev = data;
 +	const char *wow_pg_fault;
@@ -2012,7 +1797,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath
  static void ath11k_wmi_tlv_op_rx(struct ath11k_base *ab, struct sk_buff *skb)
  {
  	struct wmi_cmd_hdr *cmd_hdr;
-@@ -6486,7 +6634,6 @@
+@@ -6497,7 +6634,6 @@
  		break;
  	/* add Unsupported events here */
  	case WMI_TBTTOFFSET_EXT_UPDATE_EVENTID:
@@ -2020,7 +1805,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath
  	case WMI_PEER_OPER_MODE_CHANGE_EVENTID:
  	case WMI_TWT_ENABLE_EVENTID:
  	case WMI_TWT_DISABLE_EVENTID:
-@@ -6497,6 +6644,12 @@
+@@ -6508,6 +6644,12 @@
  	case WMI_PDEV_DFS_RADAR_DETECTION_EVENTID:
  		ath11k_wmi_pdev_dfs_radar_detected_event(ab, skb);
  		break;
@@ -2033,7 +1818,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath
  	/* TODO: Add remaining events */
  	default:
  		ath11k_dbg(ab, ATH11K_DBG_WMI, "Unknown eventid: 0x%x\n", id);
-@@ -6711,3 +6864,46 @@
+@@ -6722,3 +6864,46 @@
  
  	ath11k_wmi_free_dbring_caps(ab);
  }
@@ -2082,7 +1867,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.c b/drivers/net/wireless/ath/ath
 +}
 diff -urN a/drivers/net/wireless/ath/ath11k/wmi.h b/drivers/net/wireless/ath/ath11k/wmi.h
 --- a/drivers/net/wireless/ath/ath11k/wmi.h	2020-12-14 07:41:30.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/wmi.h	2021-01-22 16:45:48.037943633 +0900
++++ b/drivers/net/wireless/ath/ath11k/wmi.h	2021-03-19 18:22:56.234604839 +0900
 @@ -4013,6 +4013,10 @@
  	u32  flag_info;
  };
@@ -2274,7 +2059,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wmi.h b/drivers/net/wireless/ath/ath
  #endif
 diff -urN a/drivers/net/wireless/ath/ath11k/wow.c b/drivers/net/wireless/ath/ath11k/wow.c
 --- a/drivers/net/wireless/ath/ath11k/wow.c	1970-01-01 09:00:00.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/wow.c	2021-01-22 16:45:48.037943633 +0900
++++ b/drivers/net/wireless/ath/ath11k/wow.c	2021-03-19 18:22:56.234604839 +0900
 @@ -0,0 +1,70 @@
 +// SPDX-License-Identifier: BSD-3-Clause-Clear
 +/*
@@ -2348,7 +2133,7 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wow.c b/drivers/net/wireless/ath/ath
 +}
 diff -urN a/drivers/net/wireless/ath/ath11k/wow.h b/drivers/net/wireless/ath/ath11k/wow.h
 --- a/drivers/net/wireless/ath/ath11k/wow.h	1970-01-01 09:00:00.000000000 +0900
-+++ b/drivers/net/wireless/ath/ath11k/wow.h	2021-01-22 16:45:48.037943633 +0900
++++ b/drivers/net/wireless/ath/ath11k/wow.h	2021-03-19 18:22:56.234604839 +0900
 @@ -0,0 +1,10 @@
 +// SPDX-License-Identifier: BSD-3-Clause-Clear
 +/*
@@ -2361,8 +2146,8 @@ diff -urN a/drivers/net/wireless/ath/ath11k/wow.h b/drivers/net/wireless/ath/ath
 +int ath11k_wow_enable(struct ath11k *ar);
 +int ath11k_wow_wakeup(struct ath11k *ar);
 diff -urN a/mm/page_alloc.c b/mm/page_alloc.c
---- a/mm/page_alloc.c	2021-01-22 16:45:27.574213564 +0900
-+++ b/mm/page_alloc.c	2021-01-22 16:45:48.041277032 +0900
+--- a/mm/page_alloc.c	2021-03-19 18:22:40.861177898 +0900
++++ b/mm/page_alloc.c	2021-03-19 18:22:56.234604839 +0900
 @@ -275,8 +275,7 @@
  unsigned int pageblock_order __read_mostly;
  #endif
@@ -2446,7 +2231,7 @@ diff -urN a/mm/page_alloc.c b/mm/page_alloc.c
  }
  
  #ifdef CONFIG_NEED_MULTIPLE_NODES
-@@ -3183,8 +3171,7 @@
+@@ -3184,8 +3172,7 @@
  	 */
  	if (migratetype >= MIGRATE_PCPTYPES) {
  		if (unlikely(is_migrate_isolate(migratetype))) {
@@ -2456,7 +2241,7 @@ diff -urN a/mm/page_alloc.c b/mm/page_alloc.c
  			return;
  		}
  		migratetype = MIGRATE_MOVABLE;
-@@ -5007,7 +4994,7 @@
+@@ -5008,7 +4995,7 @@
  	if (order == 0)		/* Via pcp? */
  		free_unref_page(page);
  	else

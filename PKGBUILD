@@ -99,7 +99,7 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '27471eee564ca3149dd271b0817719b5565a9594dc4d884fe3dc51a5f03832bc'
             '60e295601e4fb33d9bf65f198c54c7eb07c0d1e91e2ad1e0dd6cd6e142cb266d'
             '035ea4b2a7621054f4560471f45336b981538a40172d8f17285910d4e0e0b3ef'
-            '45f03bf04bf38b0387b5e988fccc4bbe58c978b9247b8b836e6e67e848a9b8eb')
+            '8f22102beee5c32019d1c778d8af9de252244faccb3af58d40ef80293e50d36f')
 
 prepare() {
   cd "${srcdir}/linux-${_basekernel}"
