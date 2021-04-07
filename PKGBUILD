@@ -14,8 +14,8 @@ pkgname=('linux510-qca6390' 'linux510-qca6390-headers')
 _kernelname=-QCA6390
 _basekernel=5.10
 _basever=510
-pkgver=5.10.27
-pkgrel=2
+pkgver=5.10.28
+pkgrel=1
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -70,8 +70,8 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '9999-ath11k-qca6390-bringup-202012140938.patch'
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
-            '9058a5ba820e8a6e76bf0f7e622484b919666447fc266e3ed9b2c3d0d747470e'
-            '503f91393d45a0dc7ce9dc7eedcde760dbd54bb69f7605c330e787f8646d30f7'
+            '7515a313ed0f48d75a2a6811577e14fa447917e0eaa2c0427f96d2e7109f3eb3'
+            'cfed6283539fa524885a12710d2b7b32f66a08d82c1fced24588be35d112f5ad'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             'df5843818f1571841e1a8bdbe38d7f853d841f38de46d6a6a5765de089495578'
@@ -85,7 +85,7 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '1d58ef2991c625f6f0eb33b4cb8303932f53f1c4694e42bae24c9cd36d2ad013'
             '2b11905b63b05b25807dd64757c779da74dd4c37e36d3f7a46485b1ee5a9d326'
             '94a8538251ad148f1025cc3de446ce64f73dc32b01815426fb159c722e8fa5bc'
-            '37a221c12b40122167b0a30b5a9f2fc99e2aeb94e4db58a719c2b30171c5aeb5'
+            '1f18c5c10a3c63e41ecd05ad34cd9f6653ba96e9f1049ce2b7bb6da2578ae710'
             '59202940d4f12bad23c194a530edc900e066866c9945e39748484a6545af96de'
             'e096b127a5208f56d368d2cb938933454d7200d70c86b763aa22c38e0ddb8717'
             '8c1c880f2caa9c7ae43281a35410203887ea8eae750fe8d360d0c8bf80fcc6e0'
