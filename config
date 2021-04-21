@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 5.10.29-1 Kernel Configuration
+# Linux/x86 5.10.32-1 Kernel Configuration
 #
 CONFIG_CC_VERSION_TEXT="gcc (GCC) 10.2.0"
 CONFIG_CC_IS_GCC=y
@@ -10010,6 +10010,7 @@ CONFIG_DEBUG_BUGVERBOSE=y
 # Compile-time checks and compiler options
 #
 # CONFIG_DEBUG_INFO is not set
+CONFIG_DEBUG_INFO_BTF=y
 CONFIG_ENABLE_MUST_CHECK=y
 CONFIG_FRAME_WARN=2048
 CONFIG_STRIP_ASM_SYMS=y
