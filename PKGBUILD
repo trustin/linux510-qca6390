@@ -15,7 +15,7 @@ _kernelname=-QCA6390
 _basekernel=5.10
 _basever=510
 pkgver=5.10.36
-pkgrel=1
+pkgrel=2
 arch=('x86_64')
 url="http://www.kernel.org/"
 license=('GPL2')
@@ -71,7 +71,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             'e49f826654ce6592cec2bdd22b32df2dced9428968553af890ed1828bd7808e8'
-            'ca91b3a65e0f68427c2d8623f25d284a31be66490bde804928caa4e6bd4ea1ea'
+            '77e00677bb5418102b62e4a494f7204dd3457560b520939ebe3d9ffc061b2d0b'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
             'df5843818f1571841e1a8bdbe38d7f853d841f38de46d6a6a5765de089495578'
