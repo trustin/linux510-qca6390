@@ -21,7 +21,8 @@ url="https://www.kernel.org/"
 license=('GPL2')
 makedepends=('bc'
     'docbook-xsl'
-    'elfutils'
+    'libelf'
+    'pahole'
     'git'
     'inetutils'
     'kmod'
