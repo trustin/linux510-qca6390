@@ -1,5 +1,4 @@
 # Maintainer: Philip Müller <philm[at]manjaro[dot]org>
-# Maintainer: Bernhard Landauer <bernhard[at]manjaro[dot]org>
 # Maintainer: Helmut Stult <helmut[at]manjaro[dot]org>
 
 # Arch credits:
@@ -14,7 +13,7 @@ pkgname=('linux510-qca6390' 'linux510-qca6390-headers')
 _kernelname=-QCA6390
 _basekernel=5.10
 _basever=510
-pkgver=5.10.53
+pkgver=5.10.54
 pkgrel=1
 arch=('x86_64')
 url="https://www.kernel.org/"
@@ -44,7 +43,6 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
         '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
         '0103-futex.patch'
-        '0104-revert-xhci-Add-support-for-Renesas-controller-with-memory.patch'
         '0105-ucsi-acpi.patch'
         '0106-ucsi.patch'
         '0107-quirk-kernel-org-bug-210681-firmware_rome_error.patch'
@@ -71,7 +69,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '9999-ath11k-qca6390-bringup-202012140938.patch'
         )
 sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
-            '34142f8ab0bee35697c27f735c81db232f44587ec7e0da0f56d13972a32e49bc'
+            'e7d5a1b33305cf8e9d5b19ca5c87ac176a05f7de12d39a15d58acf1e0cf7dd0f'
             'a759dce1d2d872d7152312929034c045f5ba32d56faa8ace7a88dc1ba74d6fa2'
             'fc896e5b00fad732d937bfb7b0db41922ecdb3a488bc1c1b91b201e028eed866'
             '986f8d802f37b72a54256f0ab84da83cb229388d58c0b6750f7c770818a18421'
@@ -79,7 +77,6 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '7823d7488f42bc4ed7dfae6d1014dbde679d8b862c9a3697a39ba0dae5918978'
             '95745075edd597caa92b369cfbcd11a04c9e3c88c0c987c70114924e1e01df5c'
             'b302ba6c5bbe8ed19b20207505d513208fae1e678cf4d8e7ac0b154e5fe3f456'
-            '83b5684223309809393bdffc5122924cb9940403d682a887b0aa6524015df973'
             'e9ca3a8398360fa5d8d0deb5f0c0ca3d174865bd13c91eb6e0232cdbcdb2258b'
             '6446e388c0e13290fd99137539c6d3089994313a3a0c00305dea83faf4951137'
             '5e804e1f241ce542f3f0e83d274ede6aa4b0539e510fb9376f8106e8732ce69b'
@@ -103,11 +100,11 @@ sha256sums=('dcdf99e43e98330d925016985bfbc7b83c66d367b714b2de0cbbfcbf83d8ca43'
             '8f22102beee5c32019d1c778d8af9de252244faccb3af58d40ef80293e50d36f')
 
 prepare() {
-  cd "${srcdir}/linux-${_basekernel}"
+  cd "linux-${_basekernel}"
 
   # add upstream patch
   msg "add upstream patch"
-  patch -p1 -i "${srcdir}/patch-${pkgver}"
+  patch -p1 -i "../patch-${pkgver}"
 
   local src
   for src in "${source[@]}"; do
@@ -119,11 +116,11 @@ prepare() {
   done
 
   msg2 "0513-bootsplash"
-  git apply -p1 < "${srcdir}/0513-bootsplash.gitpatch"  
+  git apply -p1 < "../0513-bootsplash.gitpatch"
 
   msg2 "add config.anbox to config"
-  cat "${srcdir}/config" > ./.config
-  cat "${srcdir}/config.anbox" >> ./.config
+  cat "../config" > ./.config
+  cat "../config.anbox" >> ./.config
 
   if [ "${_kernelname}" != "" ]; then
     sed -i "s|CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION=\"${_kernelname}\"|g" ./.config
@@ -140,20 +137,12 @@ prepare() {
   msg "get kernel version"
   make prepare
 
-  # load configuration
-  # Configure the kernel. Replace the line below with one of your choice.
-  #make menuconfig # CLI menu for configuration
-  #make nconfig # new CLI menu for configuration
-  #make xconfig # X-based configuration
-  #make oldconfig # using old config from previous kernel version
-  # ... or manually edit .config
-
   msg "rewrite configuration"
   yes "" | make config >/dev/null
 }
 
 build() {
-  cd "${srcdir}/linux-${_basekernel}"
+  cd "linux-${_basekernel}"
 
   msg "build"
   make ${MAKEFLAGS} LOCALVERSION= bzImage modules
@@ -165,7 +154,7 @@ package_linux510-qca6390() {
   optdepends=('crda: to set the correct wireless channels of your country')
   provides=("linux=${pkgver}" "linux510=${pkgver}" VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE)
 
-  cd "${srcdir}/linux-${_basekernel}"
+  cd "linux-${_basekernel}"
 
   KARCH=x86
 
@@ -209,7 +198,7 @@ package_linux510-qca6390-headers() {
   depends=('gawk' 'python' 'libelf')
   provides=("linux-headers=$pkgver" "linux510-headers=$pkgver")
 
-  cd "${srcdir}/linux-${_basekernel}"
+  cd "linux-${_basekernel}"
   local _builddir="${pkgdir}/usr/lib/modules/${_kernver}/build"
 
   install -Dt "${_builddir}" -m644 Makefile .config Module.symvers
