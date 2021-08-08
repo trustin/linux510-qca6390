@@ -1,10 +1,8 @@
 acpi_call
 bbswitch
 broadcom-wl
-ndiswrapper
 nvidia
 nvidia-390xx
-nvidiabl
 r8168
 rtl8723bu
 spl_zfs
