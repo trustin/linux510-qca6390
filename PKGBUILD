@@ -43,6 +43,7 @@ source=("https://www.kernel.org/pub/linux/kernel/v5.x/linux-${_basekernel}.tar.x
         '0101-i2c-nuvoton-nc677x-hwmon-driver.patch'
         '0102-iomap-iomap_bmap-should-accept-unwritten-maps.patch'
         '0103-futex.patch'
+        '0104-revert-xhci-Add-support-for-Renesas-controller-with-memory.patch'
         '0105-ucsi-acpi.patch'
         '0106-ucsi.patch'
         '0107-quirk-kernel-org-bug-210681-firmware_rome_error.patch'
